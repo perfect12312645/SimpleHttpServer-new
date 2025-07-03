@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件上传服务</title>
+    <script src="/static/tailwind.js"></script>
+    <link href="/static/font-awesome/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#0FC6C2',
+                        neutral: '#F5F7FA',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+
+            .upload-progress {
+                @apply h-2 bg-gray-200 rounded-full overflow-hidden;
+            }
+
+            .upload-progress-bar {
+                @apply h-full bg-primary transition-all duration-300 ease-out;
+            }
+
+            .file-drop-zone {
+                @apply border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all duration-300;
+            }
+
+            .file-drop-zone.active {
+                @apply border-primary bg-primary/5;
+            }
+
+            .file-icon {
+                @apply text-2xl mr-2;
+            }
+
+            .file-icon.pdf {
+                @apply text-red-500;
+            }
+
+            .file-icon.img {
+                @apply text-blue-500;
+            }
+
+            .file-icon.doc {
+                @apply text-blue-400;
+            }
+
+            .file-icon.zip {
+                @apply text-yellow-500;
+            }
+
+            .file-icon.other {
+                @apply text-gray-500;
+            }
+
+            .toast {
+                @apply fixed top-4 right-4 px-4 py-3 rounded-md shadow-lg z-50;
+                animation: slideIn 0.3s, fadeOut 0.5s 2.5s;
+            }
+
+            @keyframes slideIn {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+
+            @keyframes fadeOut {
+                from {
+                    opacity: 1;
+                }
+                to {
+                    opacity: 0;
+                }
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="max-w-6xl mx-auto px-4 py-8">
+    <!-- 标题区域 -->
+    <header class="mb-8">
+        <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800 flex items-center">
+            <i class="fa fa-cloud-upload mr-3 text-primary"></i>
+            文件上传服务
+        </h1>
+        <p class="text-gray-600 mt-2">支持大文件上传和断点续传，最大文件大小: {{ .Max_file_size }}</p>
+    </header>
+
+    <!-- 上传区域 -->
+    <section class="bg-white rounded-xl shadow-md p-6 mb-8">
+        <div id="dropZone" class="file-drop-zone mb-6">
+            <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-3"></i>
+            <p class="text-gray-600 mb-2">拖放文件到此处上传</p>
+            <p class="text-sm text-gray-500">或</p>
+            <label class="inline-block mt-3">
+                    <span class="bg-primary hover:bg-primary/90 text-white py-2 px-6 rounded-md cursor-pointer transition-all duration-300 flex items-center justify-center">
+                        <i class="fa fa-file-o mr-2"></i> 选择文件
+                        <input type="file" id="fileInput" class="hidden" multiple/>
+                    </span>
+            </label>
+        </div>
+
+        <!-- 上传进度区域 -->
+        <div id="uploadProgressContainer" class="hidden">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg font-semibold">上传进度</h3>
+                <button id="refreshBtn" class="text-sm text-primary hover:text-primary/80">
+                    <i class="fa fa-refresh mr-1"></i> 刷新列表
+                </button>
+            </div>
+            <div id="uploadItems" class="space-y-4"></div>
+        </div>
+    </section>
+
+    <!-- 文件列表区域 -->
+    <section class="bg-white rounded-xl shadow-md p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-gray-800">已上传文件</h2>
+            <div class="text-sm text-gray-500">共 <span id="fileCount">{{ len .Files }}</span> 个文件</div>
+        </div>
+
+        <div id="fileListContainer">
+            {{ if .Files }}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            文件名
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            大小
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            上传时间
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            操作
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                    {{ range $file := .Files }}
+                    <tr class="hover:bg-gray-50 transition-colors duration-200">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <i class="fa {{ getFileIconClass .Name }} mr-2"></i>
+                                <span class="text-sm font-medium text-gray-900 truncate max-w-xs">{{ $file.Name }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $file.Size }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ .MTime | datetimeformat }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <a href="/download/{{ .Name }}"
+                               class="text-primary hover:text-primary/80 mr-4">
+                                <i class="fa fa-download mr-1"></i> 下载
+                            </a>
+                            <button onclick="deleteFile('{{ $file.Name }}')" class="text-red-600 hover:text-red-800">
+                                <i class="fa fa-trash-o mr-1"></i> 删除
+                            </button>
+                        </td>
+                    </tr>
+                    {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            {{ else }}
+            <div class="text-center py-12">
+                <i class="fa fa-folder-open-o text-5xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500">暂无上传文件</p>
+            </div>
+            {{ end }}
+        </div>
+    </section>
+</div>
+<script>
+    // 文件类型图标映射
+    const fileTypeIcons = {
+        'pdf': 'fa-file-pdf-o',
+        'doc': 'fa-file-word-o',
+        'docx': 'fa-file-word-o',
+        'xls': 'fa-file-excel-o',
+        'xlsx': 'fa-file-excel-o',
+        'ppt': 'fa-file-powerpoint-o',
+        'pptx': 'fa-file-powerpoint-o',
+        'jpg': 'fa-file-image-o',
+        'jpeg': 'fa-file-image-o',
+        'png': 'fa-file-image-o',
+        'gif': 'fa-file-image-o',
+        'bmp': 'fa-file-image-o',
+        'webp': 'fa-file-image-o',
+        'zip': 'fa-file-archive-o',
+        'rar': 'fa-file-archive-o',
+        '7z': 'fa-file-archive-o',
+        'txt': 'fa-file-text-o',
+        'default': 'fa-file-o'
+    };
+
+    // 获取文件图标类
+    function getFileIconClass(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        return fileTypeIcons[ext] || fileTypeIcons['default'];
+    }
+
+    // 显示Toast通知
+    function showToast(message, type = 'success') {
+        const colors = {
+            success: 'bg-green-500 text-white',
+            error: 'bg-red-500 text-white',
+            warning: 'bg-yellow-500 text-black',
+            info: 'bg-blue-500 text-white'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${colors[type]}`;
+        toast.innerHTML = `
+            <div class="flex items-center">
+                <i class="fa ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-times-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle'} mr-2"></i>
+                <span>${message}</span>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    }
+
+    // 上传相关功能
+    document.addEventListener('DOMContentLoaded', function () {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const uploadProgressContainer = document.getElementById('uploadProgressContainer');
+            const uploadItems = document.getElementById('uploadItems');
+            const refreshBtn = document.getElementById('refreshBtn');
+            // 存储当前上传任务
+            const uploadQueue = {};
+            // 刷新文件列表
+            refreshBtn.addEventListener('click', function () {
+                location.reload();
+            });
+
+            // 拖放事件
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, highlight, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, unhighlight, false);
+            });
+
+            function highlight() {
+                dropZone.classList.add('active');
+            }
+
+            function unhighlight() {
+                dropZone.classList.remove('active');
+            }
+
+            // 处理文件拖放
+            dropZone.addEventListener('drop', handleDrop, false);
+
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleFiles(files);
+            }
+
+            // 获取续传信息
+            function getResumeInfo(fileName) {
+                return fetch(`/get_resume_info?file_name=${encodeURIComponent(fileName)}`)
+                    .then(response => response.json());
+            }
+
+            // 处理文件选择
+            fileInput.addEventListener('change', function () {
+                handleFiles(this.files);
+            });
+
+
+            // 处理文件上传
+            function handleFiles(files) {
+                if (files.length === 0) return;
+
+                uploadProgressContainer.classList.remove('hidden');
+                uploadItems.innerHTML = '';
+
+                Array.from(files).forEach(file => {
+                    // 使用文件名作为唯一标识
+                    const fileKey = file.name;
+                    const fileSize = file.size;
+
+                    // 如果文件已在队列中，跳过
+                    if (uploadQueue[fileKey]) return;
+
+                    uploadQueue[fileKey] = {
+                        file,
+                        fileName: file.name,
+                        fileKey,
+                        status: 'pending', // pending, checking, waiting, uploading, paused, cancelled, completed
+                        uploadedChunks: 0,
+                        resolve: null,
+                        reject: null,
+                        fileSize
+                    };
+
+                    // 开始处理
+                    processUpload(fileKey);
+                });
+            }
+
+            // 创建上传进度UI
+            function createUploadProgressUI(file) {
+                const itemId = `upload-${file.name.replace(/[^a-z0-9]/gi, '-')}`;
+                const actionsId = `upload-actions-${file.name.replace(/[^a-z0-9]/gi, '-')}`;
+                const uploadItem = document.createElement('div');
+                uploadItem.id = itemId;
+                uploadItem.className = 'border border-gray-200 rounded-lg p-4';
+                uploadItem.innerHTML = `
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center truncate">
+                        <i class="fa ${getFileIconClass(file.name)} file-icon mr-3"></i>
+                        <div>
+                            <div class="font-medium truncate max-w-xs">${file.name}</div>
+                            <div class="upload-status text-gray-500 text-xs">准备中...</div>
+                        </div>
+                    </div>
+                    <div class="upload-size text-xs text-gray-500">0/${formatSize(file.size)}</div>
+                </div>
+                <div class="upload-progress">
+                    <div class="upload-progress-bar" style="width: 0%"></div>
+                </div>
+                <div id="${actionsId}" class="flex justify-end mt-3 space-x-2">
+                    <button class="pause-btn text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                        <i class="fa fa-pause"></i> 暂停
+                    </button>
+                    <button class="cancel-btn text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded">
+                        <i class="fa fa-times"></i> 取消
+                    </button>
+                </div>
+            `;
+                uploadItems.appendChild(uploadItem);
+                return {
+                    item: uploadItem,
+                    actionsId: actionsId,
+                    fileName: file.name,
+                    fileSize: file.size
+                };
+            }
+
+
+            // 处理上传流程
+            async function processUpload(fileKey) {
+                const item = uploadQueue[fileKey];
+                if (!item) return;
+
+                item.status = 'checking';
+                const chunkSize = parseInt('{{ .Chunk_size }}') * 1024 * 1024;
+                const isSmallFile = item.fileSize <= chunkSize;
+
+                try {
+                    // 1. 检查文件是否存在
+                    const checkResult = await getResumeInfo(item.fileName);
+
+                    if (checkResult.file_exists) {
+                        // 文件存在，等待用户选择
+                        item.status = 'waiting';
+                        const userChoice = await showConfirmDialog(item.fileName, isSmallFile);
+
+                        if (userChoice === 'cancel') {
+                            delete uploadQueue[fileKey];
+                            removeUploadItem(item.fileName);
+                            return;
+                        }
+
+
+                        // 映射用户选择到action参数
+                        if (userChoice === 'resume') {
+
+                            item.uploadedChunks = checkResult.uploaded_chunks || 0;
+                            item.action = 'resume';  // 新增：设置续传标识
+                        } else if (userChoice === 'replace') {
+                            item.uploadedChunks = 0; // 覆盖从头开始
+                            item.action = 'overwrite'; // 新增：设置覆盖标识
+                        }
+                    } else {
+                        item.uploadedChunks = 0; // 新文件从头开始
+                        item.action = 'new'; // 新增：设置新文件标识
+                    }
+
+                    // 2. 开始实际上传
+                    item.status = 'uploading';
+                    await startUploadProcess(item);
+
+                    // 3. 上传完成
+                    item.status = 'completed';
+                    showToast(`"${item.fileName}" 上传成功`, 'success');
+
+                } catch (error) {
+                    if (error !== 'cancelled') {
+                        console.error("上传错误:", error);
+                        showToast(`"${item.fileName}" 上传失败: ${error.message}`, 'error');
+                    }
+                    item.status = 'error';
+                } finally {
+                    // 上传完成3秒后清理
+                    setTimeout(() => {
+                        delete uploadQueue[fileKey];
+                    }, 6000);
+                }
+            }
+
+            // 开始实际上传
+            async function startUploadProcess(item) {
+                const {file, fileName, uploadedChunks = 0} = item;
+
+                // 创建上传进度UI
+                const uploadInfo = createUploadProgressUI(file);
+                const progressBar = uploadInfo.item.querySelector('.upload-progress-bar');
+                const statusText = uploadInfo.item.querySelector('.upload-status');
+                const sizeText = uploadInfo.item.querySelector('.upload-size');
+                const pauseBtn = uploadInfo.item.querySelector('.pause-btn');
+                const cancelBtn = uploadInfo.item.querySelector('.cancel-btn');
+
+
+                // 设置分块大小
+                const chunkSize = parseInt('{{ .Chunk_size }}') * 1024 * 1024; // 确保转换为数字
+                console.log(chunkSize);
+                const totalChunks = Math.ceil(file.size / chunkSize);
+                console.log(totalChunks);
+                let currentChunk = uploadedChunks;
+                let isPaused = false;
+                let controller = new AbortController();
+
+                // 更新进度显示
+                const updateProgress = () => {
+                    const percent = Math.round((currentChunk / totalChunks) * 100);
+                    progressBar.style.width = `${percent}%`;
+                    const uploadedSize = Math.min(currentChunk * chunkSize, file.size);
+                    sizeText.textContent = `${formatSize(uploadedSize)}/${formatSize(file.size)}`;
+
+                    if (currentChunk === totalChunks && !isPaused) {
+                        statusText.textContent = '上传完成';
+                        statusText.className = 'text-green-500 text-xs';
+                        const actionsContainer = document.getElementById(uploadInfo.actionsId);
+                        if (actionsContainer) actionsContainer.remove();
+
+                        setTimeout(() => {
+                            uploadInfo.item.style.opacity = '0';
+                            uploadInfo.item.style.transition = 'opacity 0.5s ease';
+                            setTimeout(() => {
+                                uploadInfo.item.remove();
+                            }, 500);
+                        }, 3000);
+                    }
+
+                };
+
+                // 初始进度更新
+                updateProgress();
+                statusText.textContent = uploadedChunks > 0
+                    ? `续传中 (${currentChunk}/${totalChunks})`
+                    : `上传中 (${currentChunk}/${totalChunks})`;
+
+                // 按钮事件
+                pauseBtn.onclick = () => {
+                    isPaused = !isPaused;
+                    pauseBtn.innerHTML = isPaused
+                        ? '<i class="fa fa-play"></i> 继续'
+                        : '<i class="fa fa-pause"></i> 暂停';
+                    if (!isPaused) uploadNextChunk();
+                };
+
+                cancelBtn.onclick = () => {
+                    controller.abort();
+                    // 立即移除上传项（添加这两行）
+                    uploadInfo.item.style.opacity = '0';
+                    setTimeout(() => uploadInfo.item.remove(), 300);
+
+                    statusText.textContent = '上传已取消';
+                    statusText.className = 'text-red-500 text-xs';
+                    delete uploadQueue[item.fileKey];
+                    throw 'cancelled';
+                };
+
+                // 上传分块
+                const uploadNextChunk = async () => {
+                    if (isPaused || currentChunk >= totalChunks) return;
+
+                    const start = currentChunk * chunkSize;
+                    const end = Math.min(start + chunkSize, file.size);
+                    const chunk = file.slice(start, end);
+
+                    // 更新UI
+                    statusText.textContent = `上传中 (${currentChunk + 1}/${totalChunks})`;
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', chunk);
+                        formData.append('file_name', fileName);
+                        formData.append('chunk_index', currentChunk);
+                        formData.append('total_chunks', totalChunks);
+                        // 新增：添加action参数
+                        formData.append('action', item.action || 'new');
+
+                        const response = await fetch('/upload', {
+                            method: 'POST',
+                            body: formData,
+                            signal: controller.signal
+                        });
+
+                        const data = await response.json();
+
+                        if (data.status !== 'success') {
+                            throw new Error(data.message || '上传失败');
+                        }
+
+                        currentChunk++;
+                        updateProgress();
+
+                        // 继续上传下一块
+                        if (currentChunk < totalChunks) {
+                            await uploadNextChunk(); // 使用 await 确保顺序执行
+                        }
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            statusText.textContent = `上传错误: ${error.message}`;
+                            statusText.className = 'text-red-500 text-xs';
+                            throw error;
+                        }
+                    }
+                };
+
+                // 开始上传
+                await uploadNextChunk();
+            }
+
+            // 删除上传项
+            function removeUploadItem(fileName) {
+                const itemId = `upload-${fileName.replace(/[^a-z0-9]/gi, '-')}`;
+                const item = document.getElementById(itemId);
+                if (item) item.remove();
+            }
+
+            // 显示确认对话框（返回Promise）
+            function showConfirmDialog(fileName, isSmallFile = true) {
+                return new Promise((resolve) => {
+                    const dialog = document.createElement('div');
+                    dialog.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+                    const showResumeButton = !isSmallFile;
+
+                    dialog.innerHTML = `
+            <div class="bg-white rounded-lg p-6 max-w-md w-full">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">文件已存在</h3>
+                <p class="text-gray-600 mb-6">文件 "${fileName}" 已存在，您想如何处理？</p>
+                <div class="flex justify-end space-x-3">
+                    <button class="cancel-btn px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                        取消
+                    </button>
+                    <button class="replace-btn px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                        覆盖
+                    </button>
+                    ${showResumeButton ? `
+                    <button class="resume-btn px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90">
+                        续传
+                    </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+
+                    // 获取按钮元素
+                    const cancelBtn = dialog.querySelector('.cancel-btn');
+                    const replaceBtn = dialog.querySelector('.replace-btn');
+                    const resumeBtn = dialog.querySelector('.resume-btn'); // 可能为 null
+
+                    // 设置事件处理
+                    cancelBtn.onclick = () => {
+                        document.body.removeChild(dialog);
+                        resolve('cancel');
+                    };
+
+                    replaceBtn.onclick = () => {
+                        document.body.removeChild(dialog);
+                        resolve('replace');
+                    };
+
+                    // 只在续传按钮存在时设置事件
+                    if (resumeBtn) {
+                        resumeBtn.onclick = () => {
+                            document.body.removeChild(dialog);
+                            resolve('resume');
+                        };
+                    }
+
+                    document.body.appendChild(dialog);
+                });
+            }
+
+            // 删除文件
+            window.deleteFile = function (filename) {
+                if (confirm(`确定要删除文件 "${filename}" 吗？`)) {
+                    fetch(`/delete/${filename}`, {
+                        method: 'DELETE'
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showToast('文件已删除', 'success');
+                                // 重新加载页面
+                                setTimeout(() => {
+                                    location.reload();
+                                }, 1500);
+                            } else {
+                                showToast(`删除失败: ${data.message}`, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            showToast(`删除错误: ${error.message}`, 'error');
+                        });
+                }
+            }
+
+            // 格式化文件大小
+            function formatSize(bytes) {
+                if (bytes === 0) return '0 B';
+
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(1024));
+
+                return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + units[i];
+            }
+        }
+    )
+    ;
+</script>
+</body>
+</html>
