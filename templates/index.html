@@ -11,19 +11,40 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#165DFF',
+                        primary: '#165DFF', // 你的自定义主色
                         secondary: '#0FC6C2',
                         neutral: '#F5F7FA',
                     },
                     fontFamily: {
                         inter: ['Inter', 'sans-serif'],
                     },
+                    keyframes: {
+                        slideIn: {
+                            'from': {transform: 'translateX(100%)', opacity: '0'},
+                            'to': {transform: 'translateX(0)', opacity: '1'},
+                        },
+                        fadeOut: {
+                            'from': {opacity: '1'},
+                            'to': {opacity: '0'},
+                        }
+                    },
+                    animation: {
+                        'slide-in': 'slideIn 0.3s',
+                        'fade-out': 'fadeOut 0.5s 2.5s',
+                    },
+                    spacing: {
+                        'scroll-mt': '1.25rem',
+                    },
+                    scrollMargin: {
+                        'file-list': '1.25rem',
+                    }
                 }
             }
         }
     </script>
     <style type="text/tailwindcss">
         @layer utilities {
+            /* 原有样式保留 */
             .content-auto {
                 content-visibility: auto;
             }
@@ -69,50 +90,72 @@
             }
 
             .toast {
-                @apply fixed top-4 right-4 px-4 py-3 rounded-md shadow-lg z-50;
-                animation: slideIn 0.3s, fadeOut 0.5s 2.5s;
+                @apply fixed top-4 right-4 px-4 py-3 rounded-md shadow-lg z-50 animate-slide-in animate-fade-out;
             }
 
-            @keyframes slideIn {
+            /* 新增：二维码弹窗动画 */
+            .modal-fade-in {
+                animation: fadeIn 0.2s ease-in-out;
+            }
+
+            @keyframes fadeIn {
                 from {
-                    transform: translateX(100%);
                     opacity: 0;
                 }
                 to {
-                    transform: translateX(0);
                     opacity: 1;
                 }
             }
 
-            @keyframes fadeOut {
-                from {
-                    opacity: 1;
-                }
-                to {
-                    opacity: 0;
-                }
+            /* ========== 核心补全：固定表头+滚动容器样式 ========== */
+            /* 滚动容器：固定高度+横向滚动+精简滚动条 */
+            .file-table-container {
+                @apply overflow-x-auto max-h-[70vh] scrollbar-thin;
+            }
+
+            /* 固定表头：粘性定位+防遮挡 */
+            .sticky-table-header {
+                @apply sticky top-0 bg-white z-10;
+            }
+
+            /* 锚点定位优化 */
+            .file-list-section {
+                @apply scroll-mt-5;
+            }
+
+            /* 精简滚动条（Firefox + Chrome/Safari） */
+            .scrollbar-thin {
+                scrollbar-width: thin; /* Firefox */
+            }
+
+            .scrollbar-thin::-webkit-scrollbar {
+                width: 6px; /* Chrome/Safari */
+            }
+
+            .scrollbar-thin::-webkit-scrollbar-thumb {
+                @apply bg-gray-300 rounded-full;
             }
         }
     </style>
 </head>
 <body>
 <div class="max-w-6xl mx-auto px-4 py-8">
-    <!-- 标题区域 -->
-    <header class="mb-8">
+    <!-- 标题区域：微压间距（mb-8→mb-6，mt-2→mt-1） -->
+    <header class="mb-6">
         <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800 flex items-center">
             <i class="fa fa-cloud-upload mr-3 text-primary"></i>
             文件上传服务
         </h1>
-        <p class="text-gray-600 mt-2">支持大文件上传和断点续传，最大文件大小: {{ .Max_file_size }}</p>
+        <p class="text-gray-600 mt-1">支持大文件上传和断点续传，最大文件大小: {{ .Max_file_size }}</p>
     </header>
 
-    <!-- 上传区域 -->
-    <section class="bg-white rounded-xl shadow-md p-6 mb-8">
-        <div id="dropZone" class="file-drop-zone mb-6">
+    <!-- 上传区域：微压间距（p-6→p-5，mb-8→mb-6；dropZone mb-6→mb-5，mt-3→mt-2） -->
+    <section class="bg-white rounded-xl shadow-md p-5 mb-6">
+        <div id="dropZone" class="file-drop-zone mb-5">
             <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-3"></i>
             <p class="text-gray-600 mb-2">拖放文件到此处上传</p>
             <p class="text-sm text-gray-500">或</p>
-            <label class="inline-block mt-3">
+            <label class="inline-block mt-2">
                     <span class="bg-primary hover:bg-primary/90 text-white py-2 px-6 rounded-md cursor-pointer transition-all duration-300 flex items-center justify-center">
                         <i class="fa fa-file-o mr-2"></i> 选择文件
                         <input type="file" id="fileInput" class="hidden" multiple/>
@@ -120,7 +163,7 @@
             </label>
         </div>
 
-        <!-- 上传进度区域 -->
+        <!-- 上传进度区域：保留原有样式 -->
         <div id="uploadProgressContainer" class="hidden">
             <div class="flex justify-between items-center mb-3">
                 <h3 class="text-lg font-semibold">上传进度</h3>
@@ -132,29 +175,49 @@
         </div>
     </section>
 
-    <!-- 文件列表区域 -->
-    <section class="bg-white rounded-xl shadow-md p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-bold text-gray-800">已上传文件</h2>
-            <div class="text-sm text-gray-500">共 <span id="fileCount">{{ len .Files }}</span> 个文件</div>
+    <!-- 核心修改1：给文件列表区域添加锚点ID → fileListSection -->
+    <section id="fileListSection" class="file-list-section bg-white rounded-xl shadow-md p-6">
+        <div class="flex justify-between items-center mb-5">
+            <h2 class="text-xl font-bold text-gray-800">{{ .dirAbs }}</h2>
+            <!-- 新增：文件名搜索框 -->
+            <div class="flex items-center gap-2">
+                <input
+                        type="text"
+                        id="searchInput"
+                        placeholder="搜索文件名..."
+                        value="{{ .SearchKey }}"
+                        class="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary w-48"
+                >
+                <button
+                        onclick="searchFiles()"
+                        class="bg-primary text-white text-sm px-3 py-1 rounded-md hover:bg-primary/90 transition-colors flex items-center"
+                >
+                    <i class="fa fa-search mr-1"></i>搜索
+                </button>
+            </div>
         </div>
 
         <div id="fileListContainer">
             {{ if .Files }}
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
+            <!-- 核心修改：添加滚动容器 + 固定表头样式 -->
+            <!-- 文件列表表格（核心修正版） -->
+            <div class="file-table-container" style="max-height: 70vh;">
+                <!-- 1. 强制表格撑满容器 + 固定列宽 -->
+                <table class="w-full table-fixed divide-y divide-gray-200">
+                    <thead class="sticky-table-header"
+                           style="position: sticky; top: 0; background: white; z-index: 10;">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <!-- 2. 合理分配列宽（消除右侧空白） -->
+                        <th class="w-[45%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             文件名
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             大小
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="w-[20%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             上传时间
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="w-[25%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             操作
                         </th>
                     </tr>
@@ -162,38 +225,168 @@
                     <tbody class="bg-white divide-y divide-gray-200">
                     {{ range $file := .Files }}
                     <tr class="hover:bg-gray-50 transition-colors duration-200">
-                        <td class="px-6 py-4 whitespace-nowrap">
+                        <td class="w-[45%] px-4 py-3 whitespace-nowrap">
                             <div class="flex items-center">
-                                <i class="fa {{ getFileIconClass .Name }} mr-2"></i>
+                                {{ if $file.IsDir }}
+                                <i class="fa fa-folder-o mr-2 text-primary"></i>
+                                <a href="/explore/{{ $file.Name }}"
+                                   class="text-sm font-medium text-primary hover:text-primary/80 truncate max-w-xs transition-colors">
+                                    {{ $file.Name }}
+                                </a>
+                                {{ else }}
+                                <i class="fa {{ getFileIconClass $file.Name }} mr-2"></i>
                                 <span class="text-sm font-medium text-gray-900 truncate max-w-xs">{{ $file.Name }}</span>
+                                {{ end }}
                             </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $file.Size }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ .MTime | datetimeformat }}
+                        <td class="w-[10%] px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {{ if $file.IsDir }}文件夹{{ else }}{{ $file.Size }}{{ end }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <a href="/download/{{ .Name }}"
-                               class="text-primary hover:text-primary/80 mr-4">
+                        <td class="w-[20%] px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {{ $file.MTime | datetimeformat }}
+                        </td>
+                        <td class="w-[25%] px-4 py-3 whitespace-nowrap text-sm font-medium">
+                            {{ if not $file.IsDir }}
+                            <!-- 3. 缩小按钮间距（mr-2），紧凑布局 -->
+                            {{ if $file.IsText }}
+                            <a href="/preview/{{ $file.Name }}"
+                               class="text-secondary hover:text-secondary/80 mr-2 inline-block">
+                                <i class="fa fa-eye mr-1"></i> 预览
+                            </a>
+                            {{ end }}
+
+                            {{ if lt $file.SizeBytes 10240 }}
+                            <button onclick="generateQrcode('{{ $file.Name }}')"
+                                    class="text-yellow-500 hover:text-yellow-600 mr-2 inline-block">
+                                <i class="fa fa-qrcode mr-1"></i> 二维码
+                            </button>
+                            {{ end }}
+
+                            <a href="/download/{{ $file.Name }}"
+                               class="text-primary hover:text-primary/80 mr-2 inline-block">
                                 <i class="fa fa-download mr-1"></i> 下载
                             </a>
-                            <button onclick="deleteFile('{{ $file.Name }}')" class="text-red-600 hover:text-red-800">
+
+                            <button onclick="deleteFile('{{ $file.Name }}')"
+                                    class="text-red-600 hover:text-red-800 inline-block">
                                 <i class="fa fa-trash-o mr-1"></i> 删除
                             </button>
+                            {{ end }}
                         </td>
                     </tr>
                     {{ end }}
                     </tbody>
                 </table>
             </div>
+
             {{ else }}
             <div class="text-center py-12">
                 <i class="fa fa-folder-open-o text-5xl text-gray-300 mb-4"></i>
                 <p class="text-gray-500">暂无上传文件</p>
             </div>
             {{ end }}
+
+            <!-- 分页控件：微压间距（mt-8→mt-6） + 核心修改2：所有分页链接添加锚点#fileListSection -->
+            {{ if gt .TotalPage 1 }}
+            <div class="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <!-- 分页信息 -->
+                <div class="text-sm text-gray-600">
+                    第 {{ .CurrentPage }} 页 / 共 {{ .TotalPage }} 页 | 总 {{ .Total }} 条记录
+                </div>
+
+                <!-- 分页按钮组：所有链接拼接#fileListSection锚点 -->
+                <div class="flex items-center gap-2">
+                    <!-- 首页 -->
+                    <a href="?page=1&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage 1 }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
+                        <i class="fa fa-angle-double-left"></i>
+                    </a>
+
+                    <!-- 上一页 -->
+                    <a href="?page={{ sub .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage 1 }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <!-- 页码数字 -->
+                    {{ if gt .CurrentPage 2 }}
+                    <a href="?page={{ sub .CurrentPage 2 }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                        {{ sub .CurrentPage 2 }}
+                    </a>
+                    {{ end }}
+
+                    {{ if gt .CurrentPage 1 }}
+                    <a href="?page={{ sub .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                        {{ sub .CurrentPage 1 }}
+                    </a>
+                    {{ end }}
+
+                    <!-- 当前页 -->
+                    <span class="px-3 py-2 rounded-md border border-primary bg-primary text-white">
+                        {{ .CurrentPage }}
+                    </span>
+
+                    {{ if lt .CurrentPage .TotalPage }}
+                    <a href="?page={{ add .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                        {{ add .CurrentPage 1 }}
+                    </a>
+                    {{ end }}
+
+                    {{ if lt .CurrentPage (sub .TotalPage 1) }}
+                    <a href="?page={{ add .CurrentPage 2 }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                        {{ add .CurrentPage 2 }}
+                    </a>
+                    {{ end }}
+
+                    <!-- 下一页 -->
+                    <a href="?page={{ add .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage .TotalPage }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+
+                    <!-- 尾页 -->
+                    <a href="?page={{ .TotalPage }}&pageSize={{ .PageSize }}#fileListSection"
+                       class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage .TotalPage }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
+                        <i class="fa fa-angle-double-right"></i>
+                    </a>
+
+                    <!-- 每页条数选择：onchange事件添加锚点#fileListSection -->
+                    <select onchange="window.location.href='?page=1&pageSize='+this.value+'#fileListSection'"
+                            class="ml-2 px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+                        <option value="10" {{ if eq .PageSize 10 }}selected{{ end }}>10条/页</option>
+                        <option value="20" {{ if eq .PageSize 20 }}selected{{ end }}>20条/页</option>
+                        <option value="50" {{ if eq .PageSize 50 }}selected{{ end }}>50条/页</option>
+                    </select>
+                </div>
+            </div>
+            {{ end }}
         </div>
     </section>
+    <!-- 先添加二维码弹窗的HTML（放在页面任意位置，建议body末尾） -->
+    <div id="qrcodeModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800">文件二维码</h3>
+                <button id="closeModal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div id="qrcodeContainer" class="flex flex-col items-center gap-4 py-4">
+                <!-- 二维码内容（后端返回后渲染） -->
+                <div class="text-gray-500 text-sm">加载中...</div>
+            </div>
+            <div class="flex justify-end">
+                <button id="closeModalBtn"
+                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-gray-800 transition-colors">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 <script>
     // 文件类型图标映射
@@ -248,6 +441,82 @@
             toast.remove();
         }, 3000);
     }
+
+    // 搜索文件（携带分页参数）
+    function searchFiles() {
+        const searchKey = document.getElementById('searchInput').value.trim();
+        const urlParams = new URLSearchParams(window.location.search);
+        const page = urlParams.get('page') || '1';
+        const pageSize = urlParams.get('pageSize') || '10';
+
+        // 构造URL：保留分页参数，添加搜索关键词
+        let newUrl = window.location.pathname + `?page=${page}&pageSize=${pageSize}`;
+        if (searchKey) {
+            newUrl += `&search=${encodeURIComponent(searchKey)}`;
+        }
+        // 锚点定位到文件列表
+        newUrl += '#fileListSection';
+
+        window.location.href = newUrl;
+    }
+
+    // 回车触发搜索
+    document.getElementById('searchInput').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            searchFiles();
+        }
+    });
+
+    // 生成二维码逻辑
+    function generateQrcode(filename) {
+        // 显示弹窗
+        const modal = document.getElementById('qrcodeModal');
+        const container = document.getElementById('qrcodeContainer');
+        modal.classList.remove('hidden');
+        container.innerHTML = '<div class="text-gray-500 text-sm">加载中...</div>';
+
+        // 请求后端接口（后端逻辑后续实现）
+        fetch(`/api/qrcode/${filename}`)
+            .then(res => {
+                if (!res.ok) throw new Error('生成二维码失败');
+                return res.json();
+            })
+            .then(data => {
+                // 假设后端返回多个二维码链接：data.qrcodes = ["url1", "url2"]
+                if (data.qrcodes && data.qrcodes.length > 0) {
+                    let qrcodeHtml = '';
+                    data.qrcodes.forEach((qrcodeUrl, index) => {
+                        qrcodeHtml += `
+                        <div class="text-center mb-3">
+                            <p class="text-xs text-gray-500 mb-1">二维码${index + 1}</p>
+                            <img src="${qrcodeUrl}" alt="文件二维码${index + 1}" class="w-40 h-40 mx-auto">
+                        </div>
+                    `;
+                    });
+                    container.innerHTML = qrcodeHtml;
+                } else {
+                    container.innerHTML = '<div class="text-gray-500 text-sm">暂无二维码数据</div>';
+                }
+            })
+            .catch(err => {
+                container.innerHTML = `<div class="text-red-500 text-sm">${err.message}</div>`;
+            });
+    }
+
+    // 关闭弹窗
+    document.getElementById('closeModal').addEventListener('click', () => {
+        document.getElementById('qrcodeModal').classList.add('hidden');
+    });
+    document.getElementById('closeModalBtn').addEventListener('click', () => {
+        document.getElementById('qrcodeModal').classList.add('hidden');
+    });
+
+    // 点击弹窗外部关闭
+    document.getElementById('qrcodeModal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('qrcodeModal')) {
+            document.getElementById('qrcodeModal').classList.add('hidden');
+        }
+    });
 
     // 上传相关功能
     document.addEventListener('DOMContentLoaded', function () {
