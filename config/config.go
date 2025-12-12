@@ -56,3 +56,31 @@ var GlobalConfig = &ServerConfig{
 		"txt":  "fa-file-text-o",
 	},
 }
+var TextFileExts = map[string]bool{
+	// 通用文本
+	"txt":      true,
+	"md":       true,
+	"markdown": true,
+	// 配置文件
+	"json": true,
+	"xml":  true,
+	"yml":  true,
+	"yaml": true,
+	"ini":  true,
+	"conf": true,
+	"cfg":  true,
+	// 日志/数据
+	"log": true,
+	"csv": true,
+	"tsv": true,
+	// 代码源文件（按需添加）
+	"go":   true,
+	"java": true,
+	"py":   true,
+	"js":   true,
+	"html": true,
+	"css":  true,
+	"sh":   true,
+	"bat":  true,
+	"sql":  true,
+}

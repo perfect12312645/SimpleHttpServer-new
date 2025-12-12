@@ -10,7 +10,9 @@ func RouterInit(r *gin.Engine) {
 	r.GET("/", views.IndexHandler)
 	r.POST("/upload", views.UploadHandler)
 	r.GET("/get_resume_info", views.ResumeInfoHandler)
-	r.GET("/download/:filename", views.DownloadHandler)
-	r.DELETE("/delete/:filename", views.DeleteHandler)
+	r.GET("/download/*path", views.DownloadHandler)
+	r.DELETE("/delete/*path", views.DeleteHandler)
 	r.Static("/static", "./static")
+	r.GET("/explore/*path", views.ExploreDir)
+	r.GET("/preview/*path", views.PreviewFile)
 }

@@ -178,7 +178,40 @@
     <!-- 核心修改1：给文件列表区域添加锚点ID → fileListSection -->
     <section id="fileListSection" class="file-list-section bg-white rounded-xl shadow-md p-6">
         <div class="flex justify-between items-center mb-5">
-            <h2 class="text-xl font-bold text-gray-800">{{ .dirAbs }}</h2>
+            <div class="text-xl font-bold text-gray-800">
+                <nav class="flex items-center space-x-2" aria-label="Breadcrumb">
+                    <!-- 1. 根目录节点（固定：dirAbs，跳转至服务根目录） -->
+                    <a href="/" class="text-primary hover:text-primary/80 transition-colors">
+                        {{ .dirAbs }}
+                    </a>
+
+                    <!-- 2. 处理相对路径（dirRel）的多级节点 -->
+                    {{ if .dirRel }}
+                    <!-- 拆分相对路径为多级片段（处理开头/、空值、多级目录） -->
+                    {{ $relParts := split (trimPrefix .dirRel "/") "/" }}
+                    {{ $currentPath := "" }}
+
+                    {{ range $index, $part := $relParts }}
+                    {{ if $part }} <!-- 跳过空片段（比如路径末尾的/） -->
+                    <!-- 拼接当前级的完整相对路径（用于跳转） -->
+                    {{ $currentPath = printf "%s/%s" $currentPath $part }}
+                    <!-- 分隔符（/） -->
+                    <span class="text-gray-500">/</span>
+                    <!-- 目录节点：最后一级不可点击，其余可点击 -->
+                    {{ if eq $index (sub (len $relParts) 1) }}
+                    <!-- 当前目录（最后一级）：不可点击 -->
+                    <span class="text-gray-800">{{ $part }}</span>
+                    {{ else }}
+                    <!-- 非当前目录：可点击跳转 -->
+                    <a href="/explore{{ $currentPath }}" class="text-primary hover:text-primary/80 transition-colors">
+                        {{ $part }}
+                    </a>
+                    {{ end }}
+                    {{ end }}
+                    {{ end }}
+                    {{ end }}
+                </nav>
+            </div>
             <!-- 新增：文件名搜索框 -->
             <div class="flex items-center gap-2">
                 <input
@@ -229,7 +262,15 @@
                             <div class="flex items-center">
                                 {{ if $file.IsDir }}
                                 <i class="fa fa-folder-o mr-2 text-primary"></i>
-                                <a href="/explore/{{ $file.Name }}"
+                                {{ $targetPath := "" }}
+                                {{ if $.dirRel }}
+                                <!-- 多级目录拼接：/explore/xxx/bbb -->
+                                {{ $targetPath = printf "/explore%s/%s" $.dirRel $file.Name }}
+                                {{ else }}
+                                <!-- 根目录拼接：/explore/bbb -->
+                                {{ $targetPath = printf "/explore/%s" $file.Name }}
+                                {{ end }}
+                                <a href="{{ $targetPath }}"
                                    class="text-sm font-medium text-primary hover:text-primary/80 truncate max-w-xs transition-colors">
                                     {{ $file.Name }}
                                 </a>
@@ -247,27 +288,42 @@
                         </td>
                         <td class="w-[25%] px-4 py-3 whitespace-nowrap text-sm font-medium">
                             {{ if not $file.IsDir }}
-                            <!-- 3. 缩小按钮间距（mr-2），紧凑布局 -->
+                            <!-- 核心：定义文件完整路径（兼容多级目录） -->
+                            {{ $fileFullPath := "" }}
+                            {{ if $.dirRel }}
+                            <!-- 多级目录：拼接 dirRel + 文件名（如 /xxx/yyy/a.txt） -->
+                            {{ $fileFullPath = printf "%s/%s" $.dirRel $file.Name }}
+                            {{ else }}
+                            <!-- 根目录：直接用文件名（如 a.txt） -->
+                            {{ $fileFullPath = $file.Name }}
+                            {{ end }}
+                            <!-- 清理路径中的多余/（比如//），避免路径错误 -->
+                            {{ $fileFullPath = replace $fileFullPath "//" "/" }}
+
+                            <!-- 预览按钮：拼接完整预览路径 -->
                             {{ if $file.IsText }}
-                            <a href="/preview/{{ $file.Name }}"
+                            <a href="/preview/{{ $fileFullPath }}"
                                class="text-secondary hover:text-secondary/80 mr-2 inline-block">
                                 <i class="fa fa-eye mr-1"></i> 预览
                             </a>
                             {{ end }}
 
+                            <!-- 二维码按钮：传递完整文件路径给JS -->
                             {{ if lt $file.SizeBytes 10240 }}
-                            <button onclick="generateQrcode('{{ $file.Name }}')"
+                            <button onclick="generateQrcode('{{ $fileFullPath }}')"
                                     class="text-yellow-500 hover:text-yellow-600 mr-2 inline-block">
                                 <i class="fa fa-qrcode mr-1"></i> 二维码
                             </button>
                             {{ end }}
 
-                            <a href="/download/{{ $file.Name }}"
+                            <!-- 下载按钮：拼接完整下载路径 -->
+                            <a href="/download/{{ $fileFullPath }}"
                                class="text-primary hover:text-primary/80 mr-2 inline-block">
                                 <i class="fa fa-download mr-1"></i> 下载
                             </a>
 
-                            <button onclick="deleteFile('{{ $file.Name }}')"
+                            <!-- 删除按钮：传递完整文件路径给JS -->
+                            <button onclick="deleteFile('{{ $fileFullPath }}')"
                                     class="text-red-600 hover:text-red-800 inline-block">
                                 <i class="fa fa-trash-o mr-1"></i> 删除
                             </button>
@@ -442,14 +498,14 @@
         }, 3000);
     }
 
-    // 搜索文件（携带分页参数）
     function searchFiles() {
         const searchKey = document.getElementById('searchInput').value.trim();
         const urlParams = new URLSearchParams(window.location.search);
-        const page = urlParams.get('page') || '1';
-        const pageSize = urlParams.get('pageSize') || '10';
+        // 核心修正：搜索时强制重置为第1页，仅保留每页条数（pageSize）
+        const page = '1'; // 全局搜索默认从第1页开始
+        const pageSize = urlParams.get('pageSize') || '10'; // 保留用户选择的每页条数
 
-        // 构造URL：保留分页参数，添加搜索关键词
+        // 构造URL：重置page=1，保留pageSize，追加搜索关键词
         let newUrl = window.location.pathname + `?page=${page}&pageSize=${pageSize}`;
         if (searchKey) {
             newUrl += `&search=${encodeURIComponent(searchKey)}`;
@@ -460,7 +516,7 @@
         window.location.href = newUrl;
     }
 
-    // 回车触发搜索
+    // 回车触发搜索（保留）
     document.getElementById('searchInput').addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
             searchFiles();
@@ -900,12 +956,23 @@
             }
 
             // 删除文件
-            window.deleteFile = function (filename) {
-                if (confirm(`确定要删除文件 "${filename}" 吗？`)) {
-                    fetch(`/delete/${filename}`, {
+            window.deleteFile = function (fileFullPath) {
+                // 保留原始路径用于友好提示（不编码）
+                const originalPath = fileFullPath;
+                // 对完整路径做URL编码（处理空格、中文、特殊字符等）
+                const encodedPath = encodeURIComponent(fileFullPath);
+
+                if (confirm(`确定要删除文件 "${originalPath}" 吗？`)) {
+                    fetch(`/delete/${encodedPath}`, {
                         method: 'DELETE'
                     })
-                        .then(response => response.json())
+                        .then(response => {
+                            // 兼容后端可能返回非JSON的情况（比如500错误）
+                            if (!response.ok) {
+                                throw new Error(`HTTP错误，状态码：${response.status}`);
+                            }
+                            return response.json();
+                        })
                         .then(data => {
                             if (data.status === 'success') {
                                 showToast('文件已删除', 'success');
@@ -921,7 +988,7 @@
                             showToast(`删除错误: ${error.message}`, 'error');
                         });
                 }
-            }
+            };
 
             // 格式化文件大小
             function formatSize(bytes) {

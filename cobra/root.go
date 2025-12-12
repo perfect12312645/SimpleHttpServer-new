@@ -76,6 +76,12 @@ var rootCmd = &cobra.Command{
 			"sub": func(a, b int) int { // 新增
 				return a - b
 			},
+			"split":      strings.Split,
+			"trimPrefix": strings.TrimPrefix,
+			"replace": func(s, old, new string) string {
+				// n=-1 表示替换所有匹配项（模板中替换//为/需要替换所有）
+				return strings.Replace(s, old, new, -1)
+			},
 		})
 
 		// 5. 加载模板 + 初始化路由（修复原代码路由未挂载的问题）

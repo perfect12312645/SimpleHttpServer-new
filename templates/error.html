@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>出错了 - 文件上传服务</title>
+  <!-- 引入Font Awesome（和主页面保持一致） -->
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <!-- 基础样式，复用主页面的设计规范 -->
+  <style>
+    /* 全局重置 */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: #f3f4f6;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    /* 错误容器 */
+    .error-container {
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* 错误图标 */
+    .error-icon {
+      font-size: 60px;
+      color: #ef4444; /* 红色系错误色 */
+      margin-bottom: 20px;
+    }
+
+    /* 错误标题 */
+    .error-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 12px;
+    }
+
+    /* 错误详情 */
+    .error-detail {
+      color: #6b7280;
+      line-height: 1.6;
+      margin-bottom: 30px;
+      padding: 16px;
+      background-color: #f9fafb;
+      border-radius: 8px;
+      border-left: 4px solid #ef4444;
+      text-align: left;
+      word-break: break-all;
+    }
+
+    /* 返回按钮 */
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 24px;
+      background-color: #3b82f6; /* 和主页面primary主色一致 */
+      color: #ffffff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: background-color 0.2s ease;
+      border: none;
+      cursor: pointer;
+    }
+
+    .back-btn:hover {
+      background-color: #2563eb; /* 主色hover态 */
+    }
+
+    .back-btn i {
+      margin-right: 8px;
+    }
+
+    /* 响应式适配 */
+    @media (max-width: 576px) {
+      .error-container {
+        padding: 24px;
+      }
+      .error-icon {
+        font-size: 48px;
+      }
+      .error-title {
+        font-size: 1.25rem;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="error-container">
+  <!-- 错误图标 -->
+  <div class="error-icon">
+    <i class="fa fa-exclamation-circle"></i>
+  </div>
+  <!-- 错误标题 -->
+  <h1 class="error-title">操作失败</h1>
+  <!-- 错误详情（从后端传参获取） -->
+  <div class="error-detail">
+    {{ .error }}
+  </div>
+  <!-- 返回首页按钮 -->
+  <a href="/" class="back-btn">
+    <i class="fa fa-home"></i> 返回首页
+  </a>
+</div>
+</body>
+</html>

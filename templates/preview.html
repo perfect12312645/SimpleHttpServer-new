@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .fileName }} - 文件预览</title>
+    <!-- 可选：引入语法高亮（提升体验） -->
+    <link rel="stylesheet" href="/static/default.min.css">
+    <script src="/static/highlight.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            background-color: #f3f4f6;
+            padding: 20px;
+        }
+        .preview-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .preview-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-info {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .preview-content {
+            padding: 20px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        pre {
+            white-space: pre-wrap; /* 自动换行，避免横向滚动 */
+            word-break: break-all;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1f2937;
+        }
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            background-color: #3b82f6;
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .back-btn:hover {
+            background-color: #2563eb;
+        }
+        .back-btn i {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+<div class="preview-container">
+    <div class="preview-header">
+        <div>
+            <h2 class="text-xl font-bold text-gray-800">{{ .fileName }}</h2>
+            <div class="file-info">
+                大小：{{ .fileSize }} 字节
+            </div>
+        </div>
+        <a href="javascript:history.back()" class="back-btn">
+            <i class="fa fa-arrow-left"></i> 返回
+        </a>
+    </div>
+    <div class="preview-content">
+        <pre><code>{{ .content }}</code></pre>
+    </div>
+</div>
+
+<!-- 可选：语法高亮初始化（根据文件后缀自动识别） -->
+<script>
+    // 从文件名获取后缀，用于语法高亮
+    const fileName = "{{ .fileName }}";
+    const ext = fileName.split('.').pop().toLowerCase();
+    // 常见后缀映射到highlight.js的语言名
+    const langMap = {
+        "go": "go",
+        "java": "java",
+        "py": "python",
+        "js": "javascript",
+        "html": "html",
+        "css": "css",
+        "sh": "bash",
+        "json": "json",
+        "yml": "yaml",
+        "xml": "xml",
+        "md": "markdown"
+    };
+    const lang = langMap[ext] || "plaintext";
+    document.querySelector('code').className = lang;
+    hljs.highlightAll();
+</script>
+<!-- 引入Font Awesome图标 -->
+<link rel="stylesheet" hhref="/static/font-awesome/css/font-awesome.min.css">
+</body>
+</html>

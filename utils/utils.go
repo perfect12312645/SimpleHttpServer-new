@@ -1,6 +1,11 @@
 package utils
 
-import "fmt"
+import (
+	"SimpleHttpServer/config"
+	"fmt"
+	"path/filepath"
+	"strings"
+)
 
 func FormatSize(size int64) string {
 	units := []string{"B", "KB", "MB", "GB", "TB"}
@@ -13,4 +18,21 @@ func FormatSize(size int64) string {
 	}
 
 	return fmt.Sprintf("%.2f %s", floatSize, units[unitIndex])
+}
+
+// IsTextFile 后缀判断版：高效、无IO，适合海量文件场景
+// 核心逻辑：提取后缀→转小写→匹配预定义列表
+func IsTextFile(filename string) bool {
+	// 1. 提取文件后缀（带.）
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		// 无后缀：判定为非文本（可根据业务调整，比如返回false/让用户手动标记）
+		return false
+	}
+
+	// 2. 去掉前缀.，转小写（兼容大写后缀如.TXT/.JSON）
+	extLower := strings.ToLower(ext[1:])
+
+	// 3. 匹配文本后缀列表
+	return config.TextFileExts[extLower]
 }
