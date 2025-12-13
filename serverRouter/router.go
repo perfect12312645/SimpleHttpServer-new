@@ -15,4 +15,5 @@ func RouterInit(r *gin.Engine) {
 	r.Static("/static", "./static")
 	r.GET("/explore/*path", views.ExploreDir)
 	r.GET("/preview/*path", views.PreviewFile)
+	r.GET("/qrcode/*path", views.HandleFileToQR)
 }

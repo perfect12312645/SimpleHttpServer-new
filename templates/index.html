@@ -135,6 +135,32 @@
             .scrollbar-thin::-webkit-scrollbar-thumb {
                 @apply bg-gray-300 rounded-full;
             }
+
+            /* ========== 新增：二维码弹窗优化样式 ========== */
+            .qrcode-modal-content {
+                @apply max-w-3xl w-full mx-4 modal-fade-in;
+            }
+            .qrcode-carousel {
+                @apply relative w-full flex items-center justify-center py-4;
+            }
+            .qrcode-img {
+                @apply max-w-[80%] max-h-[60vh] w-auto h-auto object-contain border border-gray-200 rounded-lg;
+            }
+            .qrcode-nav-btn {
+                @apply absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 hover:bg-white shadow-md flex items-center justify-center text-gray-700 hover:text-primary transition-all;
+            }
+            .qrcode-nav-btn:disabled {
+                @apply opacity-30 cursor-not-allowed hover:text-gray-700;
+            }
+            .qrcode-pagination {
+                @apply mt-4 text-center text-gray-600 text-sm;
+            }
+            .qrcode-instructions {
+                @apply mt-6 p-4 bg-neutral rounded-lg text-sm text-gray-700;
+            }
+            .qrcode-md5 {
+                @apply mt-2 p-2 bg-gray-100 rounded-md font-mono text-xs break-all;
+            }
         }
     </style>
 </head>
@@ -281,7 +307,7 @@
                             </div>
                         </td>
                         <td class="w-[10%] px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {{ if $file.IsDir }}文件夹{{ else }}{{ $file.Size }}{{ end }}
+                            {{ if $file.IsDir }}--{{ else }}{{ $file.Size }}{{ end }}
                         </td>
                         <td class="w-[20%] px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             {{ $file.MTime | datetimeformat }}
@@ -301,7 +327,7 @@
                             {{ $fileFullPath = replace $fileFullPath "//" "/" }}
 
                             <!-- 预览按钮：拼接完整预览路径 -->
-                            {{ if $file.IsText }}
+                            {{ if and (gt $file.SizeBytes 0) ($file.IsText) (le $file.SizeBytes 1048576) }}
                             <a href="/preview/{{ $fileFullPath }}"
                                class="text-secondary hover:text-secondary/80 mr-2 inline-block">
                                 <i class="fa fa-eye mr-1"></i> 预览
@@ -309,7 +335,7 @@
                             {{ end }}
 
                             <!-- 二维码按钮：传递完整文件路径给JS -->
-                            {{ if lt $file.SizeBytes 10240 }}
+                            {{ if and (gt $file.SizeBytes 0) (lt $file.SizeBytes 10240) }}
                             <button onclick="generateQrcode('{{ $fileFullPath }}')"
                                     class="text-yellow-500 hover:text-yellow-600 mr-2 inline-block">
                                 <i class="fa fa-qrcode mr-1"></i> 二维码
@@ -422,28 +448,61 @@
             {{ end }}
         </div>
     </section>
-    <!-- 先添加二维码弹窗的HTML（放在页面任意位置，建议body末尾） -->
+
+    <!-- ========== 重构：二维码弹窗（大尺寸+轮播+操作说明） ========== -->
     <div id="qrcodeModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-gray-800">文件二维码</h3>
-                <button id="closeModal" class="text-gray-500 hover:text-gray-700">
-                    <i class="fa fa-times"></i>
+        <div class="qrcode-modal-content bg-white rounded-xl shadow-xl p-8">
+            <!-- 弹窗头部 -->
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-gray-800">文件二维码</h3>
+                <button id="closeModal" class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fa fa-times text-lg"></i>
                 </button>
             </div>
-            <div id="qrcodeContainer" class="flex flex-col items-center gap-4 py-4">
-                <!-- 二维码内容（后端返回后渲染） -->
-                <div class="text-gray-500 text-sm">加载中...</div>
+
+            <!-- 二维码轮播区域 -->
+            <div id="qrcodeContainer" class="w-full">
+                <!-- 加载状态 -->
+                <div class="flex flex-col items-center justify-center py-12 text-gray-500">
+                    <svg class="w-8 h-8 animate-spin mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="text-sm">正在生成二维码...</p>
+                </div>
             </div>
-            <div class="flex justify-end">
+
+            <!-- 操作说明区域（默认隐藏，获取数据后显示） -->
+            <div id="qrcodeInstructions" class="qrcode-instructions hidden">
+                <h4 class="font-semibold text-gray-800 mb-2 flex items-center">
+                    <i class="fa fa-info-circle mr-2 text-primary"></i>操作指引
+                </h4>
+                <ul class="list-disc list-inside space-y-1 mb-3 text-gray-700">
+                    <li>使用微信/支付宝等扫码工具，<b>按顺序扫描所有分片二维码</b></li>
+                    <li>将每个二维码识别到的文本内容<b>按顺序拼接</b>，得到完整文件内容</li>
+                    <li>拼接完成后，可通过MD5校验值验证文件完整性</li>
+                </ul>
+                <div id="base64Tips" class="hidden mt-2 text-orange-600 text-sm bg-orange-50 p-2 rounded">
+                    <i class="fa fa-exclamation-triangle mr-1"></i>
+                    该文件为Base64编码的二进制文件：请将拼接后的文本通过Base64解码工具还原为原始文件
+                </div>
+                <div class="mt-2">
+                    <span class="text-xs text-gray-500">文件MD5校验值：</span>
+                    <div id="fileMd5" class="qrcode-md5">加载中...</div>
+                </div>
+            </div>
+
+            <!-- 弹窗底部 -->
+            <div class="flex justify-end mt-6">
                 <button id="closeModalBtn"
-                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-gray-800 transition-colors">
+                        class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-gray-800 transition-colors">
                     关闭
                 </button>
             </div>
         </div>
     </div>
 </div>
+
 <script>
     // 文件类型图标映射
     const fileTypeIcons = {
@@ -523,54 +582,219 @@
         }
     });
 
-    // 生成二维码逻辑
-    function generateQrcode(filename) {
-        // 显示弹窗
+    // ========== 核心重构：二维码相关逻辑 ==========
+    let currentFetchAbortController = null;
+    // 二维码分片数据存储
+    let qrcodeChunks = [];
+    let currentQrcodeIndex = 0;
+    let fileMd5Value = '';
+    let isBase64File = false;
+
+    // 生成二维码逻辑（参数改为filePath：文件相对路径）
+    function generateQrcode(filePath) {
+        // 1. 校验路径参数
+        if (!filePath || filePath.trim() === '') {
+            alert('请选择有效的文件路径！');
+            return;
+        }
+
+        // 2. 重置状态
+        qrcodeChunks = [];
+        currentQrcodeIndex = 0;
+        fileMd5Value = '';
+        isBase64File = false;
+
+        // 3. 显示弹窗，初始化加载状态
         const modal = document.getElementById('qrcodeModal');
         const container = document.getElementById('qrcodeContainer');
-        modal.classList.remove('hidden');
-        container.innerHTML = '<div class="text-gray-500 text-sm">加载中...</div>';
+        const instructions = document.getElementById('qrcodeInstructions');
 
-        // 请求后端接口（后端逻辑后续实现）
-        fetch(`/api/qrcode/${filename}`)
+        modal.classList.remove('hidden');
+        instructions.classList.add('hidden'); // 隐藏说明，加载完成后显示
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-12 text-gray-500">
+                <svg class="w-8 h-8 animate-spin mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="text-sm">正在生成二维码...</p>
+            </div>
+        `;
+
+        // 4. 取消之前未完成的请求（避免重复加载）
+        if (currentFetchAbortController) {
+            currentFetchAbortController.abort();
+        }
+        currentFetchAbortController = new AbortController();
+        const signal = currentFetchAbortController.signal;
+
+        // 5. 处理路径编码（避免特殊字符/斜杠导致请求错误）
+        const encodedPath = encodeURIComponent(filePath);
+        const requestUrl = `/qrcode/${encodedPath}`;
+
+        // 6. 发起后端请求
+        fetch(requestUrl, {
+            method: 'GET',
+            signal: signal, // 绑定取消信号
+            headers: {
+                'Accept': 'application/json', // 明确要求JSON响应
+            }
+        })
             .then(res => {
-                if (!res.ok) throw new Error('生成二维码失败');
+                // 细化HTTP状态码错误处理
+                if (!res.ok) {
+                    return res.json().then(errData => {
+                        throw new Error(errData.error || `请求失败（状态码：${res.status}）`);
+                    }).catch(() => {
+                        throw new Error(`请求失败（状态码：${res.status}）`);
+                    });
+                }
                 return res.json();
             })
             .then(data => {
-                // 假设后端返回多个二维码链接：data.qrcodes = ["url1", "url2"]
-                if (data.qrcodes && data.qrcodes.length > 0) {
-                    let qrcodeHtml = '';
-                    data.qrcodes.forEach((qrcodeUrl, index) => {
-                        qrcodeHtml += `
-                        <div class="text-center mb-3">
-                            <p class="text-xs text-gray-500 mb-1">二维码${index + 1}</p>
-                            <img src="${qrcodeUrl}" alt="文件二维码${index + 1}" class="w-40 h-40 mx-auto">
+                // 清空取消控制器
+                currentFetchAbortController = null;
+
+                // 存储MD5值和Base64标识
+                fileMd5Value = data.md5 || data.MD5 || '';
+                isBase64File = data.isBase64 || data.IsBase64 || false;
+
+                // 校验chunks格式，避免空/错误数据
+                if (!Array.isArray(data.chunks) || data.chunks.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-gray-500 text-sm text-center py-12">
+                            <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                            </svg>
+                            <p class="text-lg">暂无二维码分片数据</p>
                         </div>
                     `;
-                    });
-                    container.innerHTML = qrcodeHtml;
-                } else {
-                    container.innerHTML = '<div class="text-gray-500 text-sm">暂无二维码数据</div>';
+                    return;
                 }
+
+                // 存储分片数据并初始化显示
+                qrcodeChunks = data.chunks.map(chunk => ({
+                    index: chunk.index || chunk.Index || 0,
+                    total: chunk.total || chunk.Total || data.chunks.length,
+                    qrCodePNG: chunk.qrCodePNG || chunk.QRCodePNG || '',
+                    isBase64: chunk.isBase64 || chunk.IsBase64 || false
+                })).filter(chunk => chunk.qrCodePNG); // 过滤无效分片
+
+                if (qrcodeChunks.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-gray-500 text-sm text-center py-12">
+                            <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p class="text-lg">二维码数据无效，请重试</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // 渲染二维码轮播
+                renderQrcodeCarousel();
+
+                // 显示操作说明
+                document.getElementById('qrcodeInstructions').classList.remove('hidden');
+                document.getElementById('fileMd5').textContent = fileMd5Value || '未获取到MD5值';
+                document.getElementById('base64Tips').classList.toggle('hidden', !isBase64File);
             })
             .catch(err => {
-                container.innerHTML = `<div class="text-red-500 text-sm">${err.message}</div>`;
+                // 排除“请求取消”的错误（用户重复点击时的正常取消）
+                if (err.name !== 'AbortError') {
+                    container.innerHTML = `
+                        <div class="text-red-500 text-sm text-center py-12">
+                            <svg class="w-12 h-12 mx-auto mb-4 text-red-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p class="text-lg">生成二维码失败</p>
+                            <p class="mt-2 text-sm text-gray-500">${err.message || '请稍后重试'}</p>
+                        </div>
+                    `;
+                }
+                // 清空取消控制器
+                currentFetchAbortController = null;
             });
     }
 
-    // 关闭弹窗
-    document.getElementById('closeModal').addEventListener('click', () => {
-        document.getElementById('qrcodeModal').classList.add('hidden');
-    });
-    document.getElementById('closeModalBtn').addEventListener('click', () => {
-        document.getElementById('qrcodeModal').classList.add('hidden');
-    });
+    // 渲染二维码轮播
+    function renderQrcodeCarousel() {
+        const container = document.getElementById('qrcodeContainer');
+        const currentChunk = qrcodeChunks[currentQrcodeIndex];
 
-    // 点击弹窗外部关闭
-    document.getElementById('qrcodeModal').addEventListener('click', (e) => {
+        container.innerHTML = `
+            <div class="qrcode-carousel">
+                <!-- 上一页按钮 -->
+                <button class="qrcode-nav-btn left-4" onclick="changeQrcode(-1)" ${currentQrcodeIndex === 0 ? 'disabled' : ''}>
+                    <i class="fa fa-chevron-left"></i>
+                </button>
+
+                <!-- 二维码图片 -->
+                <img
+                    src="${currentChunk.qrCodePNG}"
+                    alt="文件分片 ${currentChunk.index}/${currentChunk.total} 二维码"
+                    class="qrcode-img"
+                    onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0icm91bmQiIHN0cm9rZT0icm91bmQiIHN0cm9rZS13aWR0aD0iMiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgYWxpZ25tZW50LWJhc2VsaW5lPSJtaWRkbGUiPuWbvueJhzE8L3RleHQ+PC9zdmc+';"
+                >
+
+                <!-- 下一页按钮 -->
+                <button class="qrcode-nav-btn right-4" onclick="changeQrcode(1)" ${currentQrcodeIndex === qrcodeChunks.length - 1 ? 'disabled' : ''}>
+                    <i class="fa fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="qrcode-pagination">
+                分片 ${currentQrcodeIndex + 1} / ${qrcodeChunks.length}
+                <span class="ml-2 text-gray-500 text-xs">
+                    ${currentChunk.isBase64 ? 'Base64编码' : '纯文本'}
+                </span>
+            </div>
+        `;
+    }
+
+    // 切换二维码分片
+    function changeQrcode(direction) {
+        const newIndex = currentQrcodeIndex + direction;
+        if (newIndex >= 0 && newIndex < qrcodeChunks.length) {
+            currentQrcodeIndex = newIndex;
+            renderQrcodeCarousel();
+        }
+    }
+
+    // 关闭弹窗（优化：统一逻辑，避免重复代码）
+    function closeQrcodeModal() {
+        const modal = document.getElementById('qrcodeModal');
+        modal.classList.add('hidden');
+
+        // 重置状态
+        qrcodeChunks = [];
+        currentQrcodeIndex = 0;
+        fileMd5Value = '';
+        isBase64File = false;
+
+        // 清空容器
+        document.getElementById('qrcodeContainer').innerHTML = '';
+        document.getElementById('qrcodeInstructions').classList.add('hidden');
+
+        // 取消未完成的请求
+        if (currentFetchAbortController) {
+            currentFetchAbortController.abort();
+            currentFetchAbortController = null;
+        }
+    }
+
+    // 绑定关闭事件（统一调用closeQrcodeModal）
+    document.getElementById('closeModal')?.addEventListener('click', closeQrcodeModal);
+    document.getElementById('closeModalBtn')?.addEventListener('click', closeQrcodeModal);
+    document.getElementById('qrcodeModal')?.addEventListener('click', (e) => {
         if (e.target === document.getElementById('qrcodeModal')) {
-            document.getElementById('qrcodeModal').classList.add('hidden');
+            closeQrcodeModal();
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('qrcodeModal');
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            closeQrcodeModal();
         }
     });
 
@@ -1000,8 +1224,7 @@
                 return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + units[i];
             }
         }
-    )
-    ;
+    );
 </script>
 </body>
 </html>

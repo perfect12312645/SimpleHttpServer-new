@@ -2,7 +2,10 @@ package utils
 
 import (
 	"SimpleHttpServer/config"
+	"crypto/md5"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -35,4 +38,20 @@ func IsTextFile(filename string) bool {
 
 	// 3. 匹配文本后缀列表
 	return config.TextFileExts[extLower]
+}
+
+// 计算文件的 MD5 值
+func FileMD5(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
