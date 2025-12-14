@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件上传工具 - 登录</title>
+    <script src="/static/tailwind.js"></script>
+    <link href="/static/font-awesome/css/font-awesome.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+    </style>
+</head>
+<body>
+<div class="w-full max-w-md">
+    <div class="login-card rounded-2xl shadow-2xl p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">
+                <i class="fa fa-cloud-upload-alt text-blue-500 mr-2"></i>
+                文件上传工具
+            </h1>
+            <p class="text-gray-600 mt-2">请输入用户名和密码</p>
+        </div>
+
+        {{if .error}}
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center">
+            <i class="fa fa-exclamation-circle mr-2"></i>
+            {{.error}}
+        </div>
+        {{end}}
+
+        <form method="POST" action="/login">
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-medium mb-2" for="username">
+                    <i class="fa fa-user mr-2"></i>用户名
+                </label>
+                <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                        placeholder="请输入用户名"
+                        autocomplete="username"
+                >
+            </div>
+
+            <div class="mb-8">
+                <label class="block text-gray-700 text-sm font-medium mb-2" for="password">
+                    <i class="fa fa-lock mr-2"></i>密码
+                </label>
+                <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                        placeholder="请输入密码"
+                        autocomplete="current-password"
+                >
+            </div>
+
+            <button
+                    type="submit"
+                    class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-3 px-4 rounded-lg hover:shadow-lg transform hover:-translate-y-0.5 transition duration-200"
+            >
+                <i class="fa fa-sign-in mr-2"></i>登录
+            </button>
+
+            <div class="mt-6 text-center text-sm text-gray-500">
+                <i class="fa fa-info-circle mr-1"></i>
+                请联系管理员获取登录凭据
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // 防止表单重复提交
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const submitBtn = this.querySelector('button[type="submit"]');
+        if (submitBtn.disabled) {
+            e.preventDefault();
+            return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>登录中...';
+    });
+
+    // 回车键提交
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && (e.target.id === 'username' || e.target.id === 'password')) {
+            document.querySelector('form').submit();
+        }
+    });
+</script>
+</body>
+</html>

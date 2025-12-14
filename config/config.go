@@ -23,11 +23,14 @@ type ResumeInfo struct {
 
 // ServerConfig 服务全局配置（导出类型）
 type ServerConfig struct {
-	Port        int64             // 服务端口
-	MaxFileSize int64             // 最大文件大小(B)
-	UploadDir   string            // 文件上传目录
-	ChunkSize   int64             // 分块大小(B)
-	FileIconMap map[string]string // 文件类型对应图标（修正字段名大写导出）
+	Port            int64             // 服务端口
+	MaxFileSize     int64             // 最大文件大小(B)
+	UploadDir       string            // 文件上传目录
+	ChunkSize       int64             // 分块大小(B)
+	FileIconMap     map[string]string // 文件类型对应图标（修正字段名大写导出）
+	FileToORMaxZize int64             //可转二维码的最大尺寸
+	UserName        string
+	Password        string
 }
 
 // 全局上传状态缓存

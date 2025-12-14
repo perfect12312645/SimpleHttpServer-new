@@ -1,16 +1,16 @@
 package views
 
 import (
+	"SimpleHttpServer/config"
 	// 点导入middleware包，直接调用包内函数（如Logger）
 	. "SimpleHttpServer/middleware"
-
-	"SimpleHttpServer/config"
 	"SimpleHttpServer/utils"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -83,7 +83,7 @@ func HandleFileToQR(c *gin.Context) {
 	}
 
 	// 提前校验文件大小
-	maxSize := 10 * 1024 // 10KB
+	maxSize := config.GlobalConfig.FileToORMaxZize // 10KB
 	if fileInfo.Size() >= int64(maxSize) {
 		Logger.Warn("生成二维码失败：文件大小超过限制", zap.String("full_path", fullPath), zap.Int64("file_size", fileInfo.Size()), zap.Int64("max_size", int64(maxSize)))
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -211,7 +211,7 @@ func calculatePrintableRatio(content []byte) float64 {
 // 分割文本文件 (新增错误返回，移除无用逻辑)
 func splitTextToChunks(content []byte, chunkSize int) ([]QRChunk, error) {
 	Logger.Info("开始文本文件分片", zap.Int("总字节数", len(content)), zap.Int("目标分片字节数", chunkSize))
-
+	var chunks []QRChunk
 	// 空内容校验
 	if len(content) == 0 {
 		Logger.Error("文本内容为空，无法分片")
@@ -227,57 +227,108 @@ func splitTextToChunks(content []byte, chunkSize int) ([]QRChunk, error) {
 	}
 
 	// 核心修复：按字节数计算分块数（而非字符数）
-	var chunks []QRChunk
-	currentBytePos := 0 // 当前字节位置
-	currentRunePos := 0 // 当前字符位置
-	chunkIndex := 1     // 分片索引
-	totalBytes := len(content)
 
+	//currentBytePos := 0 // 当前字节位置
+	//currentRunePos := 0 // 当前字符位置
+	//chunkIndex := 1     // 分片索引
+	totalBytes := len(content)
+	byteOffsets := make([]int, totalRunes+1)
+	for i := 0; i < totalRunes; i++ {
+		// 优化：直接计算rune的字节长度（无需转string）
+		charLen := utf8.RuneLen(runes[i])
+		if charLen == -1 {
+			charLen = len(string(runes[i])) // 兼容无效rune（兜底）
+		}
+		byteOffsets[i+1] = byteOffsets[i] + charLen
+	}
+	// 初始化分片变量
+	currentRunePos := 0 // 当前字符起始位置
+	chunkIndex := 0     // 分片索引
 	// 循环分片（保证字符不被截断）
-	for currentBytePos < totalBytes {
-		// 计算当前分片的目标字节结束位置
+	//for currentBytePos < totalBytes {
+	//	// 计算当前分片的目标字节结束位置
+	//	targetEndByte := currentBytePos + chunkSize
+	//	if targetEndByte > totalBytes {
+	//		targetEndByte = totalBytes
+	//	}
+	//
+	//	// 找到目标字节位置对应的字符位置（避免截断多字节字符）
+	//	endRunePos := currentRunePos
+	//	tempBytePos := currentBytePos
+	//	for tempBytePos < targetEndByte && endRunePos < totalRunes {
+	//		// 获取当前字符的字节长度
+	//		charLen := len(string(runes[endRunePos]))
+	//		// 如果当前字符会超出目标字节位置，停止（保证字符完整）
+	//		if tempBytePos+charLen > targetEndByte {
+	//			break
+	//		}
+	//		tempBytePos += charLen
+	//		endRunePos += 1
+	//	}
+	//
+	//	// 截取当前分片的字符→转回字节
+	//	chunkRunes := runes[currentRunePos:endRunePos]
+	//	chunkStr := string(chunkRunes)
+	//
+	//	// 添加分片
+	//	chunks = append(chunks, QRChunk{
+	//		Index:    chunkIndex,
+	//		Total:    0, // 先占位，后续统一赋值
+	//		Content:  chunkStr,
+	//		IsBase64: false,
+	//	})
+	//
+	//	// 更新位置
+	//	currentBytePos = len(string(runes[:endRunePos])) // 累计已处理字节数
+	//	currentRunePos = endRunePos
+	//	chunkIndex += 1
+	//}
+	// 外层循环：按分片大小切割（仅循环分片数次）
+	for currentRunePos < totalRunes {
+		// 1. 计算当前分片的目标结束字节位置
+		currentBytePos := byteOffsets[currentRunePos]
 		targetEndByte := currentBytePos + chunkSize
 		if targetEndByte > totalBytes {
 			targetEndByte = totalBytes
 		}
 
-		// 找到目标字节位置对应的字符位置（避免截断多字节字符）
-		endRunePos := currentRunePos
-		tempBytePos := currentBytePos
-		for tempBytePos < targetEndByte && endRunePos < totalRunes {
-			// 获取当前字符的字节长度
-			charLen := len(string(runes[endRunePos]))
-			// 如果当前字符会超出目标字节位置，停止（保证字符完整）
-			if tempBytePos+charLen > targetEndByte {
-				break
-			}
-			tempBytePos += charLen
-			endRunePos += 1
+		// 2. 二分查找：找到第一个累计字节数 ≥ targetEndByte 的字符位置
+		// 替代内层逐个遍历，时间复杂度从O(n)→O(logn)
+		endRunePos := sort.Search(len(byteOffsets), func(i int) bool {
+			return byteOffsets[i] >= targetEndByte
+		})
+		// 修正：如果找到的位置超出总字符数，或字节数超过目标，回退到前一个字符
+		if endRunePos > totalRunes || (endRunePos > 0 && byteOffsets[endRunePos] > targetEndByte) {
+			endRunePos--
+		}
+		// 兜底：至少取1个字符（避免死循环）
+		if endRunePos == currentRunePos {
+			endRunePos = min(currentRunePos+1, totalRunes)
 		}
 
-		// 截取当前分片的字符→转回字节
-		chunkRunes := runes[currentRunePos:endRunePos]
-		chunkStr := string(chunkRunes)
+		// 3. 截取分片内容（直接用rune切片转string，仅一次转换）
+		chunkContent := string(runes[currentRunePos:endRunePos])
 
-		// 添加分片
+		// 4. 添加分片
 		chunks = append(chunks, QRChunk{
 			Index:    chunkIndex,
-			Total:    0, // 先占位，后续统一赋值
-			Content:  chunkStr,
+			Total:    0, // 后续统一赋值
+			Content:  chunkContent,
 			IsBase64: false,
 		})
 
-		// 更新位置
-		currentBytePos = len(string(runes[:endRunePos])) // 累计已处理字节数
+		// 5. 更新位置（直接用预计算的偏移，无重复计算）
 		currentRunePos = endRunePos
-		chunkIndex += 1
+		chunkIndex++
 	}
-
-	// 统一设置总分块数
-	totalChunks := len(chunks)
 	for i := range chunks {
-		chunks[i].Total = totalChunks
+		chunks[i].Total = len(chunks)
 	}
+	//// 统一设置总分块数
+	totalChunks := len(chunks)
+	//for i := range chunks {
+	//	chunks[i].Total = totalChunks
+	//}
 
 	Logger.Info("文本文件分片完成", zap.Int("实际总分块数", totalChunks), zap.Int("目标分片字节数", chunkSize))
 	return chunks, nil

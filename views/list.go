@@ -68,7 +68,8 @@ func IndexHandler(c *gin.Context) {
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"Files":         fileList,
 		"Chunk_size":    GlobalConfig.ChunkSize,
-		"Max_file_size": FormatSize(GlobalConfig.MaxFileSize),
+		"Max_file_size": GlobalConfig.MaxFileSize,
+		"Username":      GlobalConfig.UserName,
 		"dirAbs":        dirAbs,
 		"dirRel":        "", // 当前目录相对路径，用于面包屑导航
 		// 分页参数：传递整数类型，确保前端模板可执行加减运算
@@ -307,7 +308,8 @@ func ExploreDir(c *gin.Context) {
 		"dirRel":        relativePath, // 当前目录相对路径，用于面包屑导航
 		"Files":         files,        // 当前目录下的文件/目录列表
 		"Chunk_size":    GlobalConfig.ChunkSize,
-		"Max_file_size": FormatSize(GlobalConfig.MaxFileSize),
+		"Username":      GlobalConfig.UserName,
+		"Max_file_size": GlobalConfig.MaxFileSize,
 		"TotalPage":     totalPage,         // 总页数
 		"Total":         total,             // 符合条件的文件总数
 		"CurrentPage":   page,              // 当前页码

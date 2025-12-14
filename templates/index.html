@@ -140,24 +140,31 @@
             .qrcode-modal-content {
                 @apply max-w-3xl w-full mx-4 modal-fade-in;
             }
+
             .qrcode-carousel {
                 @apply relative w-full flex items-center justify-center py-4;
             }
+
             .qrcode-img {
                 @apply max-w-[80%] max-h-[60vh] w-auto h-auto object-contain border border-gray-200 rounded-lg;
             }
+
             .qrcode-nav-btn {
                 @apply absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 hover:bg-white shadow-md flex items-center justify-center text-gray-700 hover:text-primary transition-all;
             }
+
             .qrcode-nav-btn:disabled {
                 @apply opacity-30 cursor-not-allowed hover:text-gray-700;
             }
+
             .qrcode-pagination {
                 @apply mt-4 text-center text-gray-600 text-sm;
             }
+
             .qrcode-instructions {
                 @apply mt-6 p-4 bg-neutral rounded-lg text-sm text-gray-700;
             }
+
             .qrcode-md5 {
                 @apply mt-2 p-2 bg-gray-100 rounded-md font-mono text-xs break-all;
             }
@@ -168,11 +175,30 @@
 <div class="max-w-6xl mx-auto px-4 py-8">
     <!-- 标题区域：微压间距（mb-8→mb-6，mt-2→mt-1） -->
     <header class="mb-6">
-        <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800 flex items-center">
-            <i class="fa fa-cloud-upload mr-3 text-primary"></i>
-            文件上传服务
-        </h1>
-        <p class="text-gray-600 mt-1">支持大文件上传和断点续传，最大文件大小: {{ .Max_file_size }}</p>
+        <div class="flex justify-between items-start">
+            <div>
+                <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800 flex items-center">
+                    <i class="fa fa-cloud-upload mr-3 text-primary"></i>
+                    文件上传服务
+                </h1>
+                <p class="text-gray-600 mt-1">支持大文件上传和断点续传，最大文件大小: {{ formatSize .Max_file_size }}</p>
+            </div>
+
+            <!-- 新增：用户名和退出按钮 -->
+            <div class="flex items-center gap-5">
+                <div class="text-right border-l-2 border-gray-300 pl-5">
+                    <div class="text-base text-gray-800 font-semibold flex items-center justify-end">
+                        <i class="fa fa-user-circle mr-3 text-primary text-lg"></i>
+                        {{.Username}}
+                    </div>
+                    <a href="/logout"
+                       class="text-sm text-gray-600 hover:text-primary hover:underline mt-2 transition-colors inline-flex items-center justify-end group">
+                        <i class="fa fa-sign-out mr-2 group-hover:translate-x-0.5 transition-transform"></i>
+                        退出登录
+                    </a>
+                </div>
+            </div>
+        </div>
     </header>
 
     <!-- 上传区域：微压间距（p-6→p-5，mb-8→mb-6；dropZone mb-6→mb-5，mt-3→mt-2） -->
@@ -464,9 +490,12 @@
             <div id="qrcodeContainer" class="w-full">
                 <!-- 加载状态 -->
                 <div class="flex flex-col items-center justify-center py-12 text-gray-500">
-                    <svg class="w-8 h-8 animate-spin mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg class="w-8 h-8 animate-spin mb-3" xmlns="http://www.w3.org/2000/svg" fill="none"
+                         viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     <p class="text-sm">正在生成二维码...</p>
                 </div>
@@ -807,6 +836,21 @@
             const refreshBtn = document.getElementById('refreshBtn');
             // 存储当前上传任务
             const uploadQueue = {};
+            // 兼容后端未配置的情况，默认0表示不限制
+            const maxFileSize = parseInt('{{ .Max_file_size }}') || 0;
+            const rawDirRel = '{{ .dirRel }}' || '';
+            const normalizedDirRel = rawDirRel.replace(/\/+/g, '/').replace(/\/$/, '').replace(/^\//, '');
+            let uploadPathPrefix = '/upload';
+            let resumeInfoPathPrefix = '/get_resume_info';
+            if (normalizedDirRel) {
+                // 拆分路径分段，仅编码每个分段（避免编码/）
+                const pathSegments = normalizedDirRel.split('/');
+                const encodedSegments = pathSegments.map(seg => encodeURIComponent(seg));
+                const encodedDirPath = encodedSegments.join('/'); // 用/拼接编码后的分段
+                uploadPathPrefix = `/upload/${encodedDirPath}`;
+                resumeInfoPathPrefix = `/get_resume_info/${encodedDirPath}`;
+            }
+
             // 刷新文件列表
             refreshBtn.addEventListener('click', function () {
                 location.reload();
@@ -850,7 +894,7 @@
 
             // 获取续传信息
             function getResumeInfo(fileName) {
-                return fetch(`/get_resume_info?file_name=${encodeURIComponent(fileName)}`)
+                return fetch(`${resumeInfoPathPrefix}?file_name=${encodeURIComponent(fileName)}`)
                     .then(response => response.json());
             }
 
@@ -868,6 +912,16 @@
                 uploadItems.innerHTML = '';
 
                 Array.from(files).forEach(file => {
+                    // 仅当maxFileSize>0时才做限制（0表示不限制）
+                    if (maxFileSize > 0 && file.size > maxFileSize) {
+                        // 提示用户：显示友好的大小单位（如MB/GB）
+                        showToast(
+                            `文件 "${file.name}" 大小超过限制（最大支持${formatSize(maxFileSize)}，当前文件${formatSize(file.size)}），无法上传`,
+                            'error'
+                        );
+                        return; // 跳过该文件，不加入上传队列
+                    }
+
                     // 使用文件名作为唯一标识
                     const fileKey = file.name;
                     const fileSize = file.size;
@@ -937,7 +991,7 @@
                 if (!item) return;
 
                 item.status = 'checking';
-                const chunkSize = parseInt('{{ .Chunk_size }}') * 1024 * 1024;
+                const chunkSize = parseInt('{{ .Chunk_size }}');
                 const isSmallFile = item.fileSize <= chunkSize;
 
                 try {
@@ -979,11 +1033,16 @@
                     showToast(`"${item.fileName}" 上传成功`, 'success');
 
                 } catch (error) {
-                    if (error !== 'cancelled') {
+                    // 检查错误消息，避免显示不必要的错误
+                    if (error.message === '上传已暂停' || error.message === '上传已取消') {
+                        // 不显示toast，只在控制台记录
+                        console.log(`"${item.fileName}" ${error.message}`);
+                        item.status = error.message === '上传已暂停' ? 'paused' : 'cancelled';
+                    } else if (error !== 'cancelled' && error.message !== 'cancelled') {
                         console.error("上传错误:", error);
                         showToast(`"${item.fileName}" 上传失败: ${error.message}`, 'error');
+                        item.status = 'error';
                     }
-                    item.status = 'error';
                 } finally {
                     // 上传完成3秒后清理
                     setTimeout(() => {
@@ -1006,13 +1065,14 @@
 
 
                 // 设置分块大小
-                const chunkSize = parseInt('{{ .Chunk_size }}') * 1024 * 1024; // 确保转换为数字
+                const chunkSize = parseInt('{{ .Chunk_size }}'); // 确保转换为数字
                 console.log(chunkSize);
                 const totalChunks = Math.ceil(file.size / chunkSize);
                 console.log(totalChunks);
                 let currentChunk = uploadedChunks;
                 let isPaused = false;
                 let controller = new AbortController();
+                let uploadAborted = false;
 
                 // 更新进度显示
                 const updateProgress = () => {
@@ -1021,7 +1081,7 @@
                     const uploadedSize = Math.min(currentChunk * chunkSize, file.size);
                     sizeText.textContent = `${formatSize(uploadedSize)}/${formatSize(file.size)}`;
 
-                    if (currentChunk === totalChunks && !isPaused) {
+                    if (currentChunk === totalChunks && !isPaused && !uploadAborted) {
                         statusText.textContent = '上传完成';
                         statusText.className = 'text-green-500 text-xs';
                         const actionsContainer = document.getElementById(uploadInfo.actionsId);
@@ -1050,30 +1110,49 @@
                     pauseBtn.innerHTML = isPaused
                         ? '<i class="fa fa-play"></i> 继续'
                         : '<i class="fa fa-pause"></i> 暂停';
-                    if (!isPaused) uploadNextChunk();
+                    if (isPaused) {
+                        statusText.textContent = `上传已暂停 (${currentChunk}/${totalChunks})`;
+                        statusText.className = 'text-yellow-500 text-xs';
+                    } else {
+                        statusText.textContent = `续传中 (${currentChunk}/${totalChunks})`;
+                        uploadNextChunk();
+                    }
                 };
 
                 cancelBtn.onclick = () => {
-                    controller.abort();
-                    // 立即移除上传项（添加这两行）
+                    // 标记为已取消
+                    item.status = 'cancelled';
+                    // 中止请求
+                    if (controller) {
+                        controller.abort();
+                    }
+                    delete uploadQueue[item.fileKey];
+
+                    // UI 过渡移除
                     uploadInfo.item.style.opacity = '0';
-                    setTimeout(() => uploadInfo.item.remove(), 300);
+                    uploadInfo.item.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => {
+                        if (uploadInfo.item && uploadInfo.item.parentNode) {
+                            uploadInfo.item.remove();
+                        }
+                    }, 300);
 
                     statusText.textContent = '上传已取消';
                     statusText.className = 'text-red-500 text-xs';
-                    delete uploadQueue[item.fileKey];
-                    throw 'cancelled';
+                    // 不再抛出错误，而是直接处理取消逻辑
+                    // 同时更新上传项的状态，让后续流程知道已取消
+                    return;
                 };
 
                 // 上传分块
                 const uploadNextChunk = async () => {
-                    if (isPaused || currentChunk >= totalChunks) return;
+                    if (isPaused || uploadAborted || currentChunk >= totalChunks) return;
 
-                    const start = currentChunk * chunkSize;
-                    const end = Math.min(start + chunkSize, file.size);
-                    const chunk = file.slice(start, end);
+                    let start = currentChunk * chunkSize;
+                    let end = Math.min(start + chunkSize, file.size);
+                    let chunk = file.slice(start, end);
 
-                    // 更新UI
+                    // 更新UI：补充分片索引的精准提示
                     statusText.textContent = `上传中 (${currentChunk + 1}/${totalChunks})`;
 
                     try {
@@ -1082,39 +1161,78 @@
                         formData.append('file_name', fileName);
                         formData.append('chunk_index', currentChunk);
                         formData.append('total_chunks', totalChunks);
-                        // 新增：添加action参数
                         formData.append('action', item.action || 'new');
 
-                        const response = await fetch('/upload', {
+                        const response = await fetch(uploadPathPrefix, {
                             method: 'POST',
                             body: formData,
-                            signal: controller.signal
+                            signal: controller.signal,
+                            // 补充：请求头优化
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
                         });
 
                         const data = await response.json();
 
                         if (data.status !== 'success') {
-                            throw new Error(data.message || '上传失败');
+                            throw new Error(data.message || `分片 ${currentChunk + 1}/${totalChunks} 上传失败`);
                         }
 
                         currentChunk++;
                         updateProgress();
 
+                        // 补充：手动释放chunk引用，触发GC回收
+                        chunk = null;
+
                         // 继续上传下一块
                         if (currentChunk < totalChunks) {
-                            await uploadNextChunk(); // 使用 await 确保顺序执行
+                            await uploadNextChunk();
+                        } else {
+                            // 补充：上传完成的UI处理
+                            statusText.textContent = '上传完成';
+                            statusText.className = 'text-green-500 text-xs';
+                            // 可选：隐藏/删除上传项，或清理按钮
+                            setTimeout(() => {
+                                uploadInfo.item.style.opacity = '0';
+                                setTimeout(() => uploadInfo.item.remove(), 500);
+                            }, 3000);
                         }
                     } catch (error) {
-                        if (error.name !== 'AbortError') {
-                            statusText.textContent = `上传错误: ${error.message}`;
+                        // 补充：区分取消错误和其他错误
+                        if (error.name === 'AbortError' || error.message === '上传已取消') {
+                            // 补充：用户主动取消的提示
+                            statusText.textContent = '上传已取消';
                             statusText.className = 'text-red-500 text-xs';
-                            throw error;
+
+                            // 不再抛出错误，直接返回
+                            return Promise.reject(new Error('上传已取消'));
+                        } else {
+                            // 补充：精细化错误提示
+                            statusText.textContent = `分片 ${currentChunk + 1}/${totalChunks} 上传错误: ${error.message}`;
+                            statusText.className = 'text-red-500 text-xs';
+
+                            // 补充：失败重试机制（指数退避）
+                            const retryCount = item.retryCount || 0;
+                            if (retryCount < 3) {
+                                item.retryCount = retryCount + 1;
+                                statusText.textContent = `重试中 (${item.retryCount}/3)...`;
+                                setTimeout(() => uploadNextChunk(), 1000 * item.retryCount); // 1s、2s、3s 递增重试
+                                return; // 避免throw，重试优先
+                            }
+                            return Promise.reject(error); // 重试3次失败后再抛出
                         }
                     }
                 };
 
+
                 // 开始上传
                 await uploadNextChunk();
+                // ========== 新增：校验是否真的上传完成 ==========
+                if (currentChunk < totalChunks) {
+                    // 未传完所有分片（暂停/取消），抛出错误阻止成功提示
+                    throw new Error(isPaused ? '上传已暂停' : '上传已取消');
+                }
             }
 
             // 删除上传项
@@ -1150,7 +1268,13 @@
                 </div>
             </div>
         `;
-
+// 点击背景关闭
+                    dialog.onclick = (e) => {
+                        if (e.target === dialog) {
+                            document.body.removeChild(dialog);
+                            resolve('cancel');
+                        }
+                    };
                     // 获取按钮元素
                     const cancelBtn = dialog.querySelector('.cancel-btn');
                     const replaceBtn = dialog.querySelector('.replace-btn');
@@ -1225,6 +1349,8 @@
             }
         }
     );
+
 </script>
+
 </body>
 </html>
