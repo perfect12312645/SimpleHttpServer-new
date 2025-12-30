@@ -65,7 +65,7 @@ var rootCmd = &cobra.Command{
 		setupSession(r)
 		// 核心中间件：恢复panic + zap日志 + 日志格式化
 		r.Use(
-			gin.Recovery(),                            // 基础panic恢复（与RecoveryWithZap配合）
+			gin.Recovery(), // 基础panic恢复（与RecoveryWithZap配合）
 			ginzap.Ginzap(Logger, time.RFC3339, true), // 请求日志
 			ginzap.RecoveryWithZap(Logger, true),      // panic恢复日志（带堆栈）
 			//gin.Logger(),                              // 可选：保留gin默认访问日志（若需要）
