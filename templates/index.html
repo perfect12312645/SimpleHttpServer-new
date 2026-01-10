@@ -405,27 +405,27 @@
                 <!-- 分页按钮组：所有链接拼接#fileListSection锚点 -->
                 <div class="flex items-center gap-2">
                     <!-- 首页 -->
-                    <a href="?page=1&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page=1&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage 1 }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
                         <i class="fa fa-angle-double-left"></i>
                     </a>
 
                     <!-- 上一页 -->
-                    <a href="?page={{ sub .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ sub .CurrentPage 1 }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage 1 }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
                     <!-- 页码数字 -->
                     {{ if gt .CurrentPage 2 }}
-                    <a href="?page={{ sub .CurrentPage 2 }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ sub .CurrentPage 2 }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
                         {{ sub .CurrentPage 2 }}
                     </a>
                     {{ end }}
 
                     {{ if gt .CurrentPage 1 }}
-                    <a href="?page={{ sub .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ sub .CurrentPage 1 }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
                         {{ sub .CurrentPage 1 }}
                     </a>
@@ -437,33 +437,41 @@
                     </span>
 
                     {{ if lt .CurrentPage .TotalPage }}
-                    <a href="?page={{ add .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ add .CurrentPage 1 }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
                         {{ add .CurrentPage 1 }}
                     </a>
                     {{ end }}
 
                     {{ if lt .CurrentPage (sub .TotalPage 1) }}
-                    <a href="?page={{ add .CurrentPage 2 }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ add .CurrentPage 2 }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
                         {{ add .CurrentPage 2 }}
                     </a>
                     {{ end }}
 
                     <!-- 下一页 -->
-                    <a href="?page={{ add .CurrentPage 1 }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ add .CurrentPage 1 }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage .TotalPage }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
                         <i class="fa fa-angle-right"></i>
                     </a>
 
                     <!-- 尾页 -->
-                    <a href="?page={{ .TotalPage }}&pageSize={{ .PageSize }}#fileListSection"
+                    <a href="?page={{ .TotalPage }}&pageSize={{ .PageSize }}{{ if .SearchKey }}&search={{ urlquery .SearchKey }}{{ end }}#fileListSection"
                        class="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors {{ if eq .CurrentPage .TotalPage }}opacity-50 cursor-not-allowed pointer-events-none{{ end }}">
                         <i class="fa fa-angle-double-right"></i>
                     </a>
 
-                    <!-- 每页条数选择：onchange事件添加锚点#fileListSection -->
-                    <select onchange="window.location.href='?page=1&pageSize='+this.value+'#fileListSection'"
+                    <!-- 每页条数选择：onchange事件拼接search参数 -->
+                    <select onchange="
+            const searchKey = document.getElementById('searchInput').value;
+            let url = '?page=1&pageSize='+this.value;
+            if (searchKey) {
+                url += '&search=' + encodeURIComponent(searchKey);
+            }
+            url += '#fileListSection';
+            window.location.href = url;
+        "
                             class="ml-2 px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
                         <option value="10" {{ if eq .PageSize 10 }}selected{{ end }}>10条/页</option>
                         <option value="20" {{ if eq .PageSize 20 }}selected{{ end }}>20条/页</option>
