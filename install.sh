@@ -177,10 +177,12 @@ else
     exit 1
 fi
 
+
 # 输出成功信息
 echo -e "\n===================== 配置完成 ====================="
 echo "服务名：${SERVICE_NAME}"
-echo "端口：${PORT}"
+echo -e "访问地址：\033[1m\033[34mhttp://[服务器IP]:${PORT}\033[0m"
+
 echo "用户名：${USERNAME}"
 echo "密码：${PASSWORD}"
 echo "可执行文件路径：${BIN_PATH}"
