@@ -963,6 +963,12 @@
                     </div>
                     <div class="upload-size text-xs text-gray-500">0/${formatSize(file.size)}</div>
                 </div>
+                <!-- 新增：进度信息行（速度、耗时、剩余时间） -->
+                <div class="upload-metrics text-xs text-gray-500 mb-2">
+                    <span class="upload-speed">速度：0 MB/s</span> |
+                    <span class="upload-elapsed">耗时：00:00</span> |
+                    <span class="upload-remaining">剩余：--:--</span>
+                </div>
                 <div class="upload-progress">
                     <div class="upload-progress-bar" style="width: 0%"></div>
                 </div>
@@ -976,14 +982,27 @@
                 </div>
             `;
                 uploadItems.appendChild(uploadItem);
+                const speedElement = uploadItem.querySelector('.upload-speed');
+                const elapsedElement = uploadItem.querySelector('.upload-elapsed');
+                const remainingElement = uploadItem.querySelector('.upload-remaining');
                 return {
                     item: uploadItem,
                     actionsId: actionsId,
                     fileName: file.name,
-                    fileSize: file.size
+                    fileSize: file.size,
+                    speedElement: speedElement,
+                    elapsedElement: elapsedElement,
+                    remainingElement: remainingElement
                 };
             }
 
+            // 格式化时间（秒转 分:秒 格式）
+            function formatTime(seconds) {
+                if (isNaN(seconds) || seconds < 0) return '--:--';
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
 
             // 处理上传流程
             async function processUpload(fileKey) {
@@ -1062,7 +1081,13 @@
                 const sizeText = uploadInfo.item.querySelector('.upload-size');
                 const pauseBtn = uploadInfo.item.querySelector('.pause-btn');
                 const cancelBtn = uploadInfo.item.querySelector('.cancel-btn');
-
+                // 新增：性能监控变量
+                let startTime = Date.now(); // 上传开始时间
+                let totalElapsed = 0; // 总耗时（秒）
+                let avgSpeed = 0; // 平均上传速度（MB/s）
+                let avgChunkTime = 0; // 平均每个分片的上传耗时（秒）
+                let pauseStartTime = 0; // 暂停开始的时间戳
+                let pausedTotalTime = 0; // 累计暂停的总时长（秒）
 
                 // 设置分块大小
                 const chunkSize = parseInt('{{ .Chunk_size }}'); // 确保转换为数字
@@ -1080,6 +1105,28 @@
                     progressBar.style.width = `${percent}%`;
                     const uploadedSize = Math.min(currentChunk * chunkSize, file.size);
                     sizeText.textContent = `${formatSize(uploadedSize)}/${formatSize(file.size)}`;
+
+                    // 仅在已传完至少1个分片时计算（避免除以0）
+                    if (currentChunk > 0 && !isPaused && !uploadAborted) {
+                        // 计算总耗时
+                        totalElapsed = (Date.now() - startTime) / 1000 - pausedTotalTime;
+
+                        // 计算平均速度：已传总大小(MB) / 总耗时(秒)
+                        const uploadedSizeMB = uploadedSize / (1024 * 1024);
+                        avgSpeed = uploadedSizeMB / totalElapsed;
+
+                        // 计算平均每个分片的耗时（秒/块）
+                        avgChunkTime = totalElapsed / currentChunk;
+
+                        // 预计剩余时间：剩余块数 × 平均单块耗时（无需精准，简化计算）
+                        const remainingChunks = totalChunks - currentChunk;
+                        const remainingTime = remainingChunks * avgChunkTime;
+
+                        // 更新UI（保留2位小数，时间转分:秒格式）
+                        uploadInfo.speedElement.textContent = `速度：${avgSpeed.toFixed(2)} MB/s`;
+                        uploadInfo.elapsedElement.textContent = `耗时：${formatTime(totalElapsed)}`;
+                        uploadInfo.remainingElement.textContent = `剩余：${formatTime(remainingTime)}`;
+                    }
 
                     if (currentChunk === totalChunks && !isPaused && !uploadAborted) {
                         statusText.textContent = '上传完成';
@@ -1113,9 +1160,20 @@
                     if (isPaused) {
                         statusText.textContent = `上传已暂停 (${currentChunk}/${totalChunks})`;
                         statusText.className = 'text-yellow-500 text-xs';
+                        uploadInfo.speedElement.textContent = `速度：-- MB/s`;
+                        uploadInfo.remainingElement.textContent = `剩余：--:--`;
+                        pauseStartTime = Date.now();
                     } else {
-                        statusText.textContent = `续传中 (${currentChunk}/${totalChunks})`;
+                        statusText.className = 'text-gray-500 text-xs';
+                        // 1. 计算本次暂停的时长，并累加至总暂停时长
+                        if (pauseStartTime > 0) {
+                            const pauseDuration = (Date.now() - pauseStartTime) / 1000;
+                            pausedTotalTime += pauseDuration;
+                            pauseStartTime = 0; // 重置暂停开始时间
+                        }
+                        updateProgress();
                         uploadNextChunk();
+
                     }
                 };
 
@@ -1146,82 +1204,80 @@
 
                 // 上传分块
                 const uploadNextChunk = async () => {
-                    if (isPaused || uploadAborted || currentChunk >= totalChunks) return;
+                    while (currentChunk < totalChunks && !isPaused && !uploadAborted) {
+                        let start = currentChunk * chunkSize;
+                        let end = Math.min(start + chunkSize, file.size);
+                        let chunk = file.slice(start, end);
 
-                    let start = currentChunk * chunkSize;
-                    let end = Math.min(start + chunkSize, file.size);
-                    let chunk = file.slice(start, end);
+                        // 更新UI：补充分片索引的精准提示
+                        statusText.textContent = `上传中 (${currentChunk + 1}/${totalChunks})`;
 
-                    // 更新UI：补充分片索引的精准提示
-                    statusText.textContent = `上传中 (${currentChunk + 1}/${totalChunks})`;
+                        try {
+                            const formData = new FormData();
+                            formData.append('file', chunk);
+                            formData.append('file_name', fileName);
+                            formData.append('chunk_index', currentChunk);
+                            formData.append('total_chunks', totalChunks);
+                            formData.append('action', item.action || 'new');
 
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', chunk);
-                        formData.append('file_name', fileName);
-                        formData.append('chunk_index', currentChunk);
-                        formData.append('total_chunks', totalChunks);
-                        formData.append('action', item.action || 'new');
+                            const response = await fetch(uploadPathPrefix, {
+                                method: 'POST',
+                                body: formData,
+                                signal: controller.signal,
+                                // 补充：请求头优化
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                }
+                            });
+                            const data = await response.json();
 
-                        const response = await fetch(uploadPathPrefix, {
-                            method: 'POST',
-                            body: formData,
-                            signal: controller.signal,
-                            // 补充：请求头优化
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
+                            if (data.status !== 'success') {
+                                throw new Error(data.message || `分片 ${currentChunk + 1}/${totalChunks} 上传失败`);
                             }
-                        });
 
-                        const data = await response.json();
+                            currentChunk++;
+                            updateProgress();
 
-                        if (data.status !== 'success') {
-                            throw new Error(data.message || `分片 ${currentChunk + 1}/${totalChunks} 上传失败`);
-                        }
+                            // 补充：手动释放chunk引用，触发GC回收
+                            chunk = null;
+                        } catch (error) {
+                            // 补充：区分取消错误和其他错误
+                            if (error.name === 'AbortError' || error.message === '上传已取消') {
+                                // 补充：用户主动取消的提示
+                                statusText.textContent = '上传已取消';
+                                statusText.className = 'text-red-500 text-xs';
 
-                        currentChunk++;
-                        updateProgress();
+                                // 不再抛出错误，直接返回
+                                return Promise.reject(new Error('上传已取消'));
+                            } else {
+                                // 补充：精细化错误提示
+                                statusText.textContent = `分片 ${currentChunk + 1}/${totalChunks} 上传错误: ${error.message}`;
+                                statusText.className = 'text-red-500 text-xs';
 
-                        // 补充：手动释放chunk引用，触发GC回收
-                        chunk = null;
-
-                        // 继续上传下一块
-                        if (currentChunk < totalChunks) {
-                            await uploadNextChunk();
-                        } else {
-                            // 补充：上传完成的UI处理
-                            statusText.textContent = '上传完成';
-                            statusText.className = 'text-green-500 text-xs';
-                            // 可选：隐藏/删除上传项，或清理按钮
-                            setTimeout(() => {
-                                uploadInfo.item.style.opacity = '0';
-                                setTimeout(() => uploadInfo.item.remove(), 500);
-                            }, 3000);
-                        }
-                    } catch (error) {
-                        // 补充：区分取消错误和其他错误
-                        if (error.name === 'AbortError' || error.message === '上传已取消') {
-                            // 补充：用户主动取消的提示
-                            statusText.textContent = '上传已取消';
-                            statusText.className = 'text-red-500 text-xs';
-
-                            // 不再抛出错误，直接返回
-                            return Promise.reject(new Error('上传已取消'));
-                        } else {
-                            // 补充：精细化错误提示
-                            statusText.textContent = `分片 ${currentChunk + 1}/${totalChunks} 上传错误: ${error.message}`;
-                            statusText.className = 'text-red-500 text-xs';
-
-                            // 补充：失败重试机制（指数退避）
-                            const retryCount = item.retryCount || 0;
-                            if (retryCount < 3) {
-                                item.retryCount = retryCount + 1;
-                                statusText.textContent = `重试中 (${item.retryCount}/3)...`;
-                                setTimeout(() => uploadNextChunk(), 1000 * item.retryCount); // 1s、2s、3s 递增重试
-                                return; // 避免throw，重试优先
+                                // 补充：失败重试机制（指数退避）
+                                const retryCount = item.retryCount || 0;
+                                if (retryCount < 3) {
+                                    item.retryCount = retryCount + 1;
+                                    statusText.textContent = `重试中 (${item.retryCount}/3)...`;
+                                    setTimeout(() => uploadNextChunk(), 1000 * item.retryCount); // 1s、2s、3s 递增重试
+                                    return; // 避免throw，重试优先
+                                }
+                                return Promise.reject(error); // 重试3次失败后再抛出
                             }
-                            return Promise.reject(error); // 重试3次失败后再抛出
                         }
+
+                    }
+
+                    // 继续上传下一块
+                    if (currentChunk >= totalChunks && !isPaused && !uploadAborted) {
+                        // 补充：上传完成的UI处理
+                        statusText.textContent = '上传完成';
+                        statusText.className = 'text-green-500 text-xs';
+                        // 可选：隐藏/删除上传项，或清理按钮
+                        setTimeout(() => {
+                            uploadInfo.item.style.opacity = '0';
+                            setTimeout(() => uploadInfo.item.remove(), 500);
+                        }, 3000);
                     }
                 };
 
